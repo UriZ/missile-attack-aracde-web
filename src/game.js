@@ -76,6 +76,10 @@ export class Game {
     // Hide OS cursor
     canvas.style.cursor = 'none';
 
+    // Preload cover image for start screen
+    this._coverImage = new Image();
+    this._coverImage.src = 'assets/coverfinal.png';
+
     // Wire wave system callbacks
     this.waves.onWaveStart = (wave) => {
       this.waveNumber = wave;
@@ -224,16 +228,27 @@ export class Game {
 
     if (this.state === 'start') {
       r.beginUI();
+
+      // Cover image — full-width marquee, centered on screen
+      const img = this._coverImage;
+      if (img.complete && img.naturalWidth > 0) {
+        const imgW = 2200;
+        const imgH = Math.round(imgW * img.naturalHeight / img.naturalWidth);
+        const imgX = (Renderer.LOGICAL_W - imgW) / 2;
+        const imgY = (Renderer.LOGICAL_H - imgH) / 2; // vertically centered
+        ctx.drawImage(img, imgX, imgY, imgW, imgH);
+      }
+
       r.drawText(
         'MISSILE ATTACK',
-        Renderer.LOGICAL_W / 2, 580,
+        Renderer.LOGICAL_W / 2, 1150,
         'bold 96px monospace',
         rgba(1, 0.4, 0.2),
         'center'
       );
       r.drawText(
         'Click to start',
-        Renderer.LOGICAL_W / 2, 780,
+        Renderer.LOGICAL_W / 2, 1300,
         '48px monospace',
         rgba(1, 1, 1, 0.6),
         'center'

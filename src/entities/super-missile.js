@@ -9,7 +9,11 @@ import { drawPoly } from './launcher.js';
 
 const INITIAL_GRAVITY = 80;
 const PARACHUTE_GRAVITY = 15;
-const PARACHUTE_SPEED = 35; // terminal velocity
+// Terminal velocity with parachute. The original Godot value was 35 px/s on a
+// ~720 px tall viewport. This implementation uses a 1440 px tall logical space
+// (terrain at y=1240, spawn at y=-80), so the missile travels ~2x as far and
+// must be proportionally faster to avoid blocking wave completion for 40+ seconds.
+const PARACHUTE_SPEED = 120;
 const OFF_SCREEN = { bottom: 1600, left: -200, right: 2760 };
 
 // Body polygons from SCENE_DATA §8

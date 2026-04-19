@@ -51,10 +51,20 @@ export class Terrain extends Entity {
     // Inter-wave recovery state
     // Set to true between waves; the update() method lerps heights toward _baseline.
     this.recovering = false;
-    // Units per second — full range is ~50 units, so 12 u/s means ~4s to heal fully.
+    // Units per second between waves — full range is ~50 units, so 12 u/s ≈ 4s full heal.
     this._recoverySpeed = 12;
-    // Minimum delta to bother redrawing (avoids re-rendering every frame for tiny drifts)
+    // Units per second during active waves — 9 u/s heals a standard 22-unit crater
+    // in ~2.5 seconds, keeping up with the ~2-second impact cadence so craters
+    // don't accumulate indefinitely while still feeling like battle damage.
+    this._recoverySpeedSlow = 9;
+    // Minimum per-column move to consider the terrain visibly changed this frame.
+    // Used to avoid triggering a full offscreen re-render for sub-pixel drifts.
     this._recoveryRedrawThreshold = 0.5;
+    // (Legacy field — kept for forward compat; no longer used for slow recovery.)
+    this._slowRecoveryAccum = 0;
+    // Maximum depth a single column can be pushed below its baseline (units).
+    // Prevents super missile spam from making permanent bottomless pits.
+    this._maxDamageDepth = 55;
 
     // Decoration data for destruction
     /** @type {Array<{x: number, width: number, drawFn: (ctx: CanvasRenderingContext2D) => void}>} */
@@ -109,16 +119,18 @@ export class Terrain extends Entity {
   // ── Inter-wave recovery ────────────────────────────────────
 
   /**
-   * Called every frame by the entity manager. Handles gradual terrain recovery
-   * between waves. During active waves this is a no-op.
+   * Called every frame by the entity manager. Handles gradual terrain recovery.
+   * Between waves: heals at _recoverySpeed (12 u/s).
+   * During waves: heals at _recoverySpeedSlow (9 u/s) — fast enough to visibly
+   * heal a standard crater in ~2.5s so dark marks don't accumulate indefinitely.
    * @param {number} dt
    */
   update(dt) {
-    if (!this.recovering) return;
-
     const n = this.heights.length;
-    const step = this._recoverySpeed * dt;
-    let changed = false;
+    const isFast = this.recovering;
+    const speed = isFast ? this._recoverySpeed : this._recoverySpeedSlow;
+    const step = speed * dt;
+    let totalMove = 0;
 
     for (let i = 0; i < n; i++) {
       const diff = this._baseline[i] - this.heights[i];
@@ -130,12 +142,14 @@ export class Terrain extends Entity {
       // Move toward baseline by at most `step` units, never overshooting.
       const move = Math.sign(diff) * Math.min(Math.abs(diff), step);
       this.heights[i] += move;
-      if (Math.abs(move) >= this._recoveryRedrawThreshold) {
-        changed = true;
-      }
+      totalMove += Math.abs(move);
     }
 
-    if (changed) this.dirty = true;
+    // Redraw whenever any column moved enough to be sub-pixel visible.
+    // Both fast (inter-wave) and slow (in-wave) recovery use the same threshold —
+    // the old slow-recovery accumulator was causing redraws to be suppressed for
+    // several seconds, making craters look permanent even when healing was active.
+    if (totalMove >= this._recoveryRedrawThreshold) this.dirty = true;
   }
 
   // ── Damage ─────────────────────────────────────────────────
@@ -158,7 +172,12 @@ export class Terrain extends Entity {
         let factor = 1 - d / radius;
         factor *= factor; // quadratic falloff
         this.heights[i] += depth * factor;
+        // Hard ceiling: never push below TERRAIN_DEPTH - 10 (absolute floor)
         this.heights[i] = Math.min(this.heights[i], TERRAIN_DEPTH - 10);
+        // Per-column cap: never exceed baseline + _maxDamageDepth so repeated
+        // hits on the same spot don't produce bottomless permanent craters.
+        const maxAllowed = this._baseline[i] + this._maxDamageDepth;
+        if (this.heights[i] > maxAllowed) this.heights[i] = maxAllowed;
       }
     }
 

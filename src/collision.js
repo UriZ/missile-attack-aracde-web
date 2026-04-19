@@ -72,6 +72,8 @@ function spawnExplosion(em, game, x, y, isMega = false) {
   game.audio.playExplosion(x, isMega);
 }
 
+const CRATER_MERGE_RADIUS = 60;
+
 /**
  * @param {import('./entities/entity-manager.js').EntityManager} em
  * @param {number} x
@@ -79,6 +81,18 @@ function spawnExplosion(em, game, x, y, isMega = false) {
  * @param {number} scale
  */
 function spawnCrater(em, x, y, scale) {
+  const craters = em.getGroup('craters');
+  for (const existing of craters) {
+    const dx = existing.x - x;
+    const dy = existing.y - y;
+    if (dx * dx + dy * dy < CRATER_MERGE_RADIUS * CRATER_MERGE_RADIUS) {
+      existing.elapsed = 0;
+      if (scale > existing.scale) {
+        existing.scale = scale;
+      }
+      return;
+    }
+  }
   em.add(new Crater(x, y, scale));
 }
 
@@ -152,9 +166,9 @@ export class CollisionSystem {
         spawnExplosion(entityManager, game, ex - 60, ey, true);
         spawnExplosion(entityManager, game, ex + 60, ey, true);
 
-        terrain.damage(ex,      ey, 180, 130);
-        terrain.damage(ex - 60, ey, 180, 130);
-        terrain.damage(ex + 60, ey, 180, 130);
+        terrain.damage(ex,      ey, 120, 45);
+        terrain.damage(ex - 60, ey, 120, 45);
+        terrain.damage(ex + 60, ey, 120, 45);
 
         spawnCrater(entityManager, ex, ey, 5);
 
@@ -163,7 +177,7 @@ export class CollisionSystem {
         // Standard enemy missile / drone hits ground.
         spawnExplosion(entityManager, game, ex, ey, false);
 
-        terrain.damage(ex, ey, 75, 55);
+        terrain.damage(ex, ey, 60, 22);
 
         spawnCrater(entityManager, ex, ey, 1.5);
 
@@ -197,6 +211,7 @@ export class CollisionSystem {
 
         const ix = launcher.x;
         const iy = launcher.y;
+        const craterY = terrain.getHeightAt(launcher.x);
 
         if (isSuperMissile(enemy)) {
           // Catastrophic hit — three mega explosions, enormous crater.
@@ -204,27 +219,27 @@ export class CollisionSystem {
           spawnExplosion(entityManager, game, ix - 40, iy, true);
           spawnExplosion(entityManager, game, ix + 40, iy, true);
 
-          terrain.damage(ix, iy, 180, 130);
+          terrain.damage(ix, iy, 120, 45);
 
-          spawnCrater(entityManager, ix, iy, 7);
+          spawnCrater(entityManager, ix, craterY, 7);
 
           game.shakeScreen(45);
         } else if (isSuicideDrone(enemy)) {
           // Suicide drone — mega explosion, same crater/shake as a standard hit.
           spawnExplosion(entityManager, game, ix, iy, true);
 
-          terrain.damage(ix, iy, 110, 80);
+          terrain.damage(ix, iy, 80, 35);
 
-          spawnCrater(entityManager, ix, iy, 3);
+          spawnCrater(entityManager, ix, craterY, 3);
 
           game.shakeScreen(28);
         } else {
           // Standard enemy missile or drone.
           spawnExplosion(entityManager, game, ix, iy, true);
 
-          terrain.damage(ix, iy, 110, 80);
+          terrain.damage(ix, iy, 80, 35);
 
-          spawnCrater(entityManager, ix, iy, 3);
+          spawnCrater(entityManager, ix, craterY, 3);
 
           game.shakeScreen(25);
         }
@@ -251,7 +266,7 @@ export class CollisionSystem {
         // SAM or heat-seeker missing everything and hitting the ground.
         spawnExplosion(entityManager, game, px, py, false);
 
-        terrain.damage(px, py, 40, 25);
+        terrain.damage(px, py, 35, 15);
 
         spawnCrater(entityManager, px, py, 1);
       }

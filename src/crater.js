@@ -54,9 +54,9 @@ function drawPoly(ctx, coords, fillColor, ox, oy, scale) {
 }
 
 // Total time a crater is visible (seconds).
-const CRATER_LIFETIME = 10;
+const CRATER_LIFETIME = 3;
 // How long before the end the crater begins fading out (seconds).
-const CRATER_FADE_DURATION = 3.5;
+const CRATER_FADE_DURATION = 2;
 
 export class Crater extends Entity {
   /**
