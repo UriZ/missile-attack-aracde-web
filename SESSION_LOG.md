@@ -596,3 +596,30 @@ Total cost: ~176k tokens across architect + 2 developers + QA + 1 fix round.
 ### Commit Summary
 
 Commit `a5a6ad7` pushed to `main`. 13 files changed, +1612 / -519 lines.
+
+---
+
+## Iteration 7: Repository Documentation — README Addition
+
+### Phase 1: Team Lead Direct Implementation
+
+**[Team Lead — direct implementation]**
+- **Files**: `README.md`
+- **Task**: Add an initial repository README with project overview and usage instructions
+
+**Implementation Details**:
+- Created new `README.md` in repository root
+- Added sections for overview, tech stack, local run instructions, controls, project structure, and notes
+- Included static server startup command and localhost URL for quick launch
+- Documented core input controls (`mouse`, `1-4` launcher selection)
+- Referenced `ARCHITECTURE.md` and `CLAUDE.md` for deeper implementation details
+- **TLDR**: Read existing project metadata (`package.json`), code entry points (`index.html`, `src/game.js`, `src/engine/input.js`), and architecture docs to produce an accurate starter README without changing gameplay code.
+
+### Task List Snapshot
+
+| Task | Status | Owner |
+|------|--------|-------|
+| Inspect repo and existing docs | completed | team-lead |
+| Add README.md with setup and controls | completed | team-lead |
+| Verify README content | completed | team-lead |
+| Re-run baseline test script | completed | team-lead |
