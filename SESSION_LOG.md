@@ -487,9 +487,112 @@ Total cost: ~176k tokens across architect + 2 developers + QA + 1 fix round.
 ### Phase 3: Developer Implementation (Parallel)
 
 **[Team Lead → game-developer "dev-nuke-fixes"]**
+- **Agent type**: `game-developer`
 - **Files**: `src/entities/nuke.js`
 - **Fixes**: BUG-001 (destroy on death), BUG-002 (green HP pips), BUG-007 (better damage feedback)
+- **Duration**: ~62s, 10 tool uses, 16k tokens
+
+**[dev-nuke-fixes → Team Lead] — COMPLETED**
+- **Agent TLDR**: Read nuke.js to understand current takeDamage() and draw() methods. Applied 4 edits: (1) Added `this.destroy()` inside takeDamage when HP<=0; (2) Changed FLASH_DURATION 0.12→0.25; (3) Changed damageShake 6→10 and damageFrac to nonlinear pow(0.6) curve; (4) Changed HP pip fill from red to green rgba(0.098, 0.902, 0.157, 0.95) and stroke from orange to white rgba(1, 1, 1, 0.9). All values kept in 0-1 float format to match file conventions.
 
 **[Team Lead → game-developer "dev-ui-fixes"]**
+- **Agent type**: `game-developer`
 - **Files**: `src/game.js`, `src/ui.js`
 - **Fixes**: BUG-003 (spawn Y -300), BUG-004 (suppress wave banner), BUG-005 (timer Math.max)
+- **Duration**: ~49s, 5 tool uses, 31 tokens (hit rate limit)
+
+**[dev-ui-fixes → Team Lead] — COMPLETED (hit rate limit but all 3 edits landed)**
+- **Agent TLDR**: Read game.js and ui.js. Applied 3 edits: (1) Changed spawnY from -120 to -300 in game.js _spawnNuke(); (2) Changed showNukeWarning() to use Math.max(this._nukeWarningTimer, NUKE_WARNING_DURATION); (3) Inserted `if (this._nukeWarningActive) return;` at line 205 in drawWaveBanner() after state machine logic but before rendering. Team lead verified all 3 changes landed correctly via grep.
+
+### Task List Snapshot (Post Bug Fixes)
+
+| Task | Status | Owner |
+|------|--------|-------|
+| #13 NUKE-1: Nuke entity + collision | completed | senior-dev-nuke |
+| #14 NUKE-2: Wave, spawn, UI, audio | completed | game-dev-nuke |
+| #15 NUKE-3: QA verification | completed | visual-qa (nuke-qa) |
+| #16 NUKE-4: Fix warning banner | completed | game-dev-fix-banner |
+| BUG-001: nuke alive flag | completed | dev-nuke-fixes |
+| BUG-002: HP pip colors | completed | dev-nuke-fixes |
+| BUG-003: nuke spawn Y | completed | dev-ui-fixes |
+| BUG-004: wave banner suppression | completed | dev-ui-fixes |
+| BUG-005: warning timer reset | completed | dev-ui-fixes |
+| BUG-006: terrain impact score | won't fix | architect (correct behavior) |
+| BUG-007: damage feedback | completed | dev-nuke-fixes |
+
+---
+
+## Iteration 6: New Features — Mushroom Cloud, Random Waves, Vulkan T2 Overhaul
+
+### Phase 1: Mushroom Cloud on Nuke Impact
+
+**[Team Lead — direct implementation]**
+- **Files**: `src/entities/mushroom-cloud.js` (new), `src/collision.js`
+- **Task**: Create dramatic rising mushroom cloud effect spawned when nuke hits terrain
+
+**Implementation Details**:
+- Created `MushroomCloud` entity (6-second lifetime, multi-phase effect)
+- Phases: stem rise (deceleration curve), cap expansion (flattened ellipse), dissipation (40% fade-out)
+- Visual elements: tapered smoke stem with gradient + internal turbulence blobs, mushroom cap with 3 concentric layers (dark outer, mid, hot inner core), 5 rolling smoke ring particles orbiting cap edge, 8 billowing internal cloud particles, ground-level expanding dust/fire ring, crown smoke on top
+- Wired into collision.js nuke terrain impact section: `entityManager.add(new MushroomCloud(ex, ey))`
+- **TLDR**: Read explosion.js to understand existing effect patterns, entity.js for base class, collision.js for nuke impact code. Created mushroom-cloud.js following same Entity pattern (update/draw). Added import and spawn call in collision.js nuke terrain section.
+
+### Phase 2: Randomized Wave System
+
+**[Team Lead — direct implementation]**
+- **Files**: `src/wave.js`
+- **Task**: Replace deterministic wave generation with randomized budget-based system
+
+**Implementation Details**:
+- Replaced fixed `generateWaveEvents()` with budget-based random system
+- Budget formula: `6 + wave * 4` (scales with difficulty)
+- Enemy costs: missile=1, drone=2, super_missile=3, suicide_drone=3, nuke=6
+- Progressive enemy pool unlocks: drones wave 2, suicide drones wave 3, nukes wave 5
+- Guaranteed minimums: `min(3 + wave, 10)` missiles, 1 nuke on wave 5+ (50% chance of 2nd on wave 8+)
+- Remaining budget filled randomly from pool; if pick is too expensive, falls back to missiles
+- Random timing across wave duration (`max(10, min(count * 1.5, 40))` seconds)
+- Nukes pushed to back half of wave (40-90% of duration) for dramatic pacing
+- Temporary: nukes enabled from wave 1 for testing (TODO markers in code)
+- **TLDR**: Read wave.js to understand existing deterministic system. Rewrote generateWaveEvents() to use budget allocation with random enemy picks and random timing. Kept difficulty scaling via budget growth and progressive pool unlocks.
+
+### Phase 3: Vulkan Cannon T2 Overhaul
+
+**[Team Lead — direct implementation]**
+- **Files**: `src/entities/vulkan-cannon.js` (full rewrite), `src/entities/vulkan-bullet.js` (full rewrite)
+- **Task**: Make the Vulkan look like Arnold's M134 minigun from Terminator 2
+
+**Vulkan Cannon Changes**:
+- Complete visual overhaul — heavy industrial M134 minigun aesthetic
+- 6 barrels in circular arrangement (was flat polygon tips), spin up to 1800°/s, coast down slowly
+- OD green ammo boxes on each side with brass ammo belt feed links
+- Chrome barrel housing with 3 clamp rings and highlight reflections
+- Muzzle brake with flash hider slots
+- Muzzle flash: bright cone with white-hot core, random side sparks, surrounding glow
+- Ejecting brass shell casings with physics (gravity, spin, 0.6s lifetime, max 12 pooled)
+- Rising smoke wisps when heat > 30% (probabilistic emission)
+- Progressive heat glow on housing/barrels → overheat red pulse with warning glow
+- Chrome reflection stripe on housing
+- Retained all gameplay mechanics (overheat, fire rate, cooling, selection)
+
+**Vulkan Bullet Changes**:
+- Trail system: 8-position history with orange-to-white gradient segments
+- Trail segments widen toward bullet head (1px → 3.5px)
+- Hot connection line from trail to current position
+- Elliptical bullet head with outer glow halo
+- White-hot inner core
+- Pointed orange tip
+- **TLDR**: Read both vulkan files to understand existing polygon-based rendering. Rewrote vulkan-cannon.js with entirely new geometry (circular barrel arrangement, ammo boxes, housing details), added particle systems (shell casings, smoke), muzzle flash effect, and heat visuals. Rewrote vulkan-bullet.js to replace flat polygon tracers with trail-based glowing rounds using position history buffer.
+
+### Task List Snapshot
+
+| Task | Status | Owner |
+|------|--------|-------|
+| Mushroom cloud entity | completed | team-lead |
+| Randomized wave system | completed | team-lead |
+| Vulkan cannon T2 overhaul | completed | team-lead |
+| Vulkan bullet tracer upgrade | completed | team-lead |
+| Git commit & push | completed | team-lead |
+
+### Commit Summary
+
+Commit `a5a6ad7` pushed to `main`. 13 files changed, +1612 / -519 lines.
