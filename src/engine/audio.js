@@ -106,6 +106,7 @@ export class Audio {
     this.motorLoopBuffer = null;
     this.spoolLoopBuffer = null;
     this.vulkanShotBuffer = null;
+    this.nukeWarningBuffer = null;
 
     this._initialized = false;
   }
@@ -131,6 +132,7 @@ export class Audio {
     this.motorLoopBuffer = this._generateMotorBuffer();
     this.spoolLoopBuffer = this._generateSpoolBuffer();
     this.vulkanShotBuffer = this._generateVulkanShotBuffer();
+    this.nukeWarningBuffer = this._generateNukeWarningBuffer();
   }
 
   // -----------------------------------------------------------------------
@@ -175,6 +177,15 @@ export class Audio {
     if (!this.audioCtx) return;
     // Godot: volume_db = randf(-3,0), pitch = randf(0.85,1.15)
     this._playBuffer(this.vulkanShotBuffer, randf(-3.0, 0.0), randf(0.85, 1.15), panFromX(x));
+  }
+
+  /**
+   * One-shot nuke incoming warning siren.
+   * @param {number} x — world x (spawn position)
+   */
+  playNukeWarning(x) {
+    if (!this.audioCtx) return;
+    this._playBuffer(this.nukeWarningBuffer, 8.0, 1.0, panFromX(x));
   }
 
   /**
@@ -488,6 +499,54 @@ export class Audio {
 
       let val = (crack + ring + punch) * envelope;
       val = Math.tanh(val * 1.5) / Math.tanh(1.5);
+
+      samples[i] = val;
+    }
+
+    return this._createBuffer(samples, sampleRate);
+  }
+
+  // -- Nuke warning siren ---------------------------------------------------
+  _generateNukeWarningBuffer() {
+    const sampleRate = 22050;
+    const duration = 1.2;
+    const numSamples = Math.floor(sampleRate * duration);
+    const samples = new Float32Array(numSamples);
+
+    const toneA = 420.0; // low tone Hz
+    const toneB = 620.0; // high tone Hz
+    const toggleInterval = 0.3; // seconds per tone
+
+    for (let i = 0; i < numSamples; i++) {
+      const t = i / sampleRate;
+
+      // Alternate between toneA and toneB every toggleInterval seconds
+      const tonePhase = Math.floor(t / toggleInterval);
+      const freq = (tonePhase % 2 === 0) ? toneA : toneB;
+
+      // Pseudo-square wave: hard-clip a sine for harshness
+      const sineVal = Math.sin(TAU * freq * t);
+      const squareWave = sineVal > 0.3 ? 1.0 : (sineVal < -0.3 ? -1.0 : sineVal / 0.3);
+
+      // Softer sine undertone at half frequency
+      const undertone = Math.sin(TAU * (freq * 0.5) * t) * 0.25;
+
+      // Brief noise click on tone transitions (within 0.004s of each toggle boundary)
+      const timeInSlot = t - tonePhase * toggleInterval;
+      const clickWindow = 0.004;
+      const isTransition = timeInSlot < clickWindow;
+      const click = isTransition ? randf(-1.0, 1.0) * (1.0 - timeInSlot / clickWindow) * 0.4 : 0.0;
+
+      // Mix primary tones
+      let val = squareWave * 0.55 + undertone + click;
+
+      // Fade in (first 0.05s) and fade out (last 0.1s) envelope
+      const fadeIn = Math.min(t / 0.05, 1.0);
+      const fadeOut = Math.min((duration - t) / 0.1, 1.0);
+      val *= fadeIn * fadeOut;
+
+      // Soft clip with tanh for final saturation
+      val = Math.tanh(val * 1.4) / Math.tanh(1.4);
 
       samples[i] = val;
     }

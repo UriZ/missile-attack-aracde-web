@@ -14,6 +14,7 @@
  */
 
 import { Explosion } from './explosion.js';
+import { MushroomCloud } from './entities/mushroom-cloud.js';
 import { Crater } from './crater.js';
 
 // ------------------------------------------------------------------
@@ -29,6 +30,12 @@ function isSuicideDrone(e) { return e.constructor.name === 'SuicideDrone'; }
 
 /** @param {import('./entities/entity.js').Entity} e */
 function isVulkanBullet(e) { return e.constructor.name === 'VulkanBullet'; }
+
+/** @param {import('./entities/entity.js').Entity} e */
+function isNuke(e) { return e.constructor.name === 'Nuke'; }
+
+/** @param {import('./entities/entity.js').Entity} e */
+function isHeatSeekingMissile(e) { return e.constructor.name === 'HeatSeekingMissile'; }
 
 // ------------------------------------------------------------------
 // Geometry helpers
@@ -130,19 +137,43 @@ export class CollisionSystem {
         if (hit.has(enemy)) continue;
         if (!circlesOverlap(proj, enemy)) continue;
 
-        // Both entities are consumed by the intercept.
-        hit.add(proj);
-        hit.add(enemy);
-        proj.destroy();
-        enemy.destroy();
-
-        // Spawn explosion at midpoint — visually cleaner than snapping to
-        // either entity's exact center when the circles only just touched.
         const mx = (proj.x + enemy.x) * 0.5;
         const my = (proj.y + enemy.y) * 0.5;
-        spawnExplosion(entityManager, game, mx, my, false);
 
-        game.onEnemyDestroyed();
+        if (isNuke(enemy)) {
+          // Nuke absorbs the hit — it may survive if HP remains.
+          const instantKill = isHeatSeekingMissile(proj);
+          const destroyed   = enemy.takeDamage(1, instantKill);
+
+          // The intercepting projectile is always consumed.
+          hit.add(proj);
+          proj.destroy();
+
+          // Small feedback explosion at midpoint
+          spawnExplosion(entityManager, game, mx, my, false);
+
+          if (destroyed) {
+            hit.add(enemy);
+            enemy.destroy();
+            // Mega explosion at nuke position
+            spawnExplosion(entityManager, game, enemy.x, enemy.y, true);
+            game.onEnemyDestroyed('nuke');
+            game.shakeScreen(20);
+          }
+        } else {
+          // Standard intercept — both consumed.
+          hit.add(proj);
+          hit.add(enemy);
+          proj.destroy();
+          enemy.destroy();
+
+          // Spawn explosion at midpoint — visually cleaner than snapping to
+          // either entity's exact center when the circles only just touched.
+          spawnExplosion(entityManager, game, mx, my, false);
+
+          game.onEnemyDestroyed();
+        }
+
         break; // proj is consumed; skip remaining enemies for this proj
       }
     }
@@ -160,7 +191,25 @@ export class CollisionSystem {
       // which may have already passed below the surface by up to one frame.
       const ey = terrain.getHeightAt(ex);
 
-      if (isSuperMissile(enemy)) {
+      if (isNuke(enemy)) {
+        // Five mega explosions in a spread pattern.
+        spawnExplosion(entityManager, game, ex,       ey,      true);
+        spawnExplosion(entityManager, game, ex - 80,  ey,      true);
+        spawnExplosion(entityManager, game, ex + 80,  ey,      true);
+        spawnExplosion(entityManager, game, ex - 40,  ey - 20, true);
+        spawnExplosion(entityManager, game, ex + 40,  ey - 20, true);
+
+        // Mushroom cloud rising from impact
+        entityManager.add(new MushroomCloud(ex, ey));
+
+        terrain.damage(ex,      ey, 200, 70);
+        terrain.damage(ex - 80, ey, 150, 55);
+        terrain.damage(ex + 80, ey, 150, 55);
+
+        spawnCrater(entityManager, ex, ey, 10);
+
+        game.shakeScreen(50);
+      } else if (isSuperMissile(enemy)) {
         // Triple mega explosion spread across the impact zone.
         spawnExplosion(entityManager, game, ex,      ey, true);
         spawnExplosion(entityManager, game, ex - 60, ey, true);
@@ -213,7 +262,35 @@ export class CollisionSystem {
         const iy = launcher.y;
         const craterY = terrain.getHeightAt(launcher.x);
 
-        if (isSuperMissile(enemy)) {
+        if (isNuke(enemy)) {
+          // Catastrophic area-damage hit — destroys ALL launchers within 300px.
+          spawnExplosion(entityManager, game, ix,      iy, true);
+          spawnExplosion(entityManager, game, ix - 60, iy, true);
+          spawnExplosion(entityManager, game, ix + 60, iy, true);
+          spawnExplosion(entityManager, game, ix - 30, iy - 20, true);
+          spawnExplosion(entityManager, game, ix + 30, iy - 20, true);
+
+          terrain.damage(ix,      iy, 200, 70);
+          terrain.damage(ix - 80, iy, 150, 55);
+          terrain.damage(ix + 80, iy, 150, 55);
+
+          spawnCrater(entityManager, ix, craterY, 10);
+
+          // Area damage: destroy all launchers within 300px of the impact point.
+          const NUKE_AREA_RADIUS = 300;
+          for (const nearby of launchers) {
+            if (hit.has(nearby)) continue;
+            const ndx = nearby.x - ix;
+            const ndy = nearby.y - iy;
+            if (ndx * ndx + ndy * ndy <= NUKE_AREA_RADIUS * NUKE_AREA_RADIUS) {
+              hit.add(nearby);
+              nearby.destroy();
+              spawnExplosion(entityManager, game, nearby.x, nearby.y, true);
+            }
+          }
+
+          game.shakeScreen(50);
+        } else if (isSuperMissile(enemy)) {
           // Catastrophic hit — three mega explosions, enormous crater.
           spawnExplosion(entityManager, game, ix,      iy, true);
           spawnExplosion(entityManager, game, ix - 40, iy, true);

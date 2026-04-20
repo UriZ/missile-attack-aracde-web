@@ -18,6 +18,7 @@ import { EnemyMissile } from './entities/enemy-missile.js';
 import { SuperMissile } from './entities/super-missile.js';
 import { Drone } from './entities/drone.js';
 import { SuicideDrone } from './entities/suicide-drone.js';
+import { Nuke } from './entities/nuke.js';
 import { rgba, lerp, randf, dist } from './utils.js';
 
 // Launcher spawn positions (from main.gd / SCENE_DATA)
@@ -259,7 +260,7 @@ export class Game {
 
       // UI layer (no shake)
       r.beginUI();
-      this.ui.drawHUD(ctx, this);
+      this.ui.drawHUD(ctx, this, this._lastDt);
       this.ui.drawWaveBanner(ctx, this._lastDt);
       this.ui.drawCrosshair(ctx, this);
     }
@@ -415,6 +416,7 @@ export class Game {
       case 'super_missile': this._spawnSuperMissile(); break;
       case 'drone': this._spawnDrone(); break;
       case 'suicide_drone': this._spawnSuicideDrone(); break;
+      case 'nuke': this._spawnNuke(); break;
     }
   }
 
@@ -464,6 +466,27 @@ export class Game {
     this.entities.add(drone);
   }
 
+  _spawnNuke() {
+    const spawnX = randf(400, 2160);
+    const spawnY = -300;
+    const nuke = new Nuke(spawnX, spawnY);
+
+    let targetX;
+    if (this.launchers.some(l => l.alive)) {
+      const alive = this.launchers.filter(l => l.alive);
+      const target = alive[Math.floor(Math.random() * alive.length)];
+      targetX = target.x + randf(-40, 40);
+    } else {
+      targetX = randf(600, 1960);
+    }
+    const targetY = this.terrain ? this.terrain.getHeightAt(targetX) : 1240;
+    nuke.launchTo(targetX, targetY, randf(5.0, 7.0));
+    this.entities.add(nuke);
+
+    this.ui.showNukeWarning();
+    this.audio.playNukeWarning(spawnX);
+  }
+
   _onDroneBomb(x, y) {
     const bomb = new EnemyMissile(x, y);
     const targetX = x + randf(-30, 30);
@@ -474,8 +497,8 @@ export class Game {
 
   // ── Game events ────────────────────────────────────────────
 
-  onEnemyDestroyed() {
-    this.score++;
+  onEnemyDestroyed(type = 'normal') {
+    this.score += type === 'nuke' ? 5 : 1;
   }
 
   shakeScreen(intensity = 15.0) {

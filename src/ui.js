@@ -30,6 +30,9 @@ const LAUNCHER_SLOTS = [
   { key: '4', type: 'vulkan',     label: 'VULKAN'  },
 ];
 
+// Nuke warning duration
+const NUKE_WARNING_DURATION = 3.0; // seconds
+
 // Wave banner animation phases
 const BANNER_FADE_IN  = 0.35; // seconds
 const BANNER_HOLD     = 1.80; // seconds
@@ -87,6 +90,10 @@ export class UI {
     this._bannerColor = rgba(1, 0.85, 0.1);
     this._bannerTimer = 0;
     this._bannerPhase = 'idle'; // 'idle' | 'fadein' | 'hold' | 'fadeout'
+
+    // Nuke warning state
+    this._nukeWarningTimer = 0;
+    this._nukeWarningActive = false;
   }
 
   // ── Public API ────────────────────────────────────────────────────────
@@ -103,6 +110,12 @@ export class UI {
     this._bannerPhase = 'fadein';
   }
 
+  /** Activate the nuke incoming warning banner. */
+  showNukeWarning() {
+    this._nukeWarningActive = true;
+    this._nukeWarningTimer = Math.max(this._nukeWarningTimer, NUKE_WARNING_DURATION);
+  }
+
   // ── Per-frame draw methods ─────────────────────────────────────────────
 
   /**
@@ -110,8 +123,9 @@ export class UI {
    * Must be called after renderer.beginUI().
    * @param {CanvasRenderingContext2D} ctx
    * @param {object} game — Game instance
+   * @param {number} [dt=1/60] — delta time in seconds
    */
-  drawHUD(ctx, game) {
+  drawHUD(ctx, game, dt = 1 / 60) {
     if (game.state === 'start') return; // start screen handled by game.js
 
     // ── Score + wave (top-left) ──
@@ -122,16 +136,18 @@ export class UI {
       this._renderer.drawText(waveText, 40, 84, '32px monospace', rgba(0.7, 0.85, 1), 'left');
     }
 
-    // ── Contextual info (top-center) ──
-    const infoMsg = this._getInfoText(game);
-    if (infoMsg) {
-      this._renderer.drawText(
-        infoMsg,
-        LOGICAL_W / 2, 36,
-        '30px monospace',
-        rgba(0.85, 0.85, 0.85, 0.85),
-        'center',
-      );
+    // ── Contextual info (top-center) — suppressed while nuke warning is active ──
+    if (!this._nukeWarningActive) {
+      const infoMsg = this._getInfoText(game);
+      if (infoMsg) {
+        this._renderer.drawText(
+          infoMsg,
+          LOGICAL_W / 2, 36,
+          '30px monospace',
+          rgba(0.85, 0.85, 0.85, 0.85),
+          'center',
+        );
+      }
     }
 
     // ── Launcher panel (bottom-left) ──
@@ -147,6 +163,9 @@ export class UI {
     if (game.state === 'gameover') {
       this._drawGameOverOverlay(ctx, game.score);
     }
+
+    // ── Nuke warning banner ──
+    this._drawNukeWarning(ctx, dt);
   }
 
   /**
@@ -181,6 +200,9 @@ export class UI {
         return;
       }
     }
+
+    // Suppress rendering while nuke warning is active (state machine still ticks)
+    if (this._nukeWarningActive) return;
 
     const cx = LOGICAL_W / 2;
     const cy = LOGICAL_H / 2;
@@ -438,6 +460,71 @@ export class UI {
         ctx.fillText('OVERHEATED', x + w / 2, y + h / 2);
       }
     }
+
+    ctx.restore();
+  }
+
+  /**
+   * Nuke incoming warning banner at top-center of screen.
+   * Blinks and fades out over NUKE_WARNING_DURATION seconds.
+   * @param {CanvasRenderingContext2D} ctx
+   * @param {number} dt — delta time in seconds
+   */
+  _drawNukeWarning(ctx, dt) {
+    if (!this._nukeWarningActive) return;
+
+    this._nukeWarningTimer -= dt;
+    if (this._nukeWarningTimer <= 0) {
+      this._nukeWarningActive = false;
+      return;
+    }
+
+    // Blinking effect
+    const blink = Math.sin(Date.now() * 0.015) > 0;
+    if (!blink) return;
+
+    // Fade out in last 0.5s
+    const fadeStart = 0.5;
+    let alpha = 1.0;
+    if (this._nukeWarningTimer < fadeStart) {
+      alpha = this._nukeWarningTimer / fadeStart;
+    }
+
+    const barW = 1000;
+    const barH = 70;
+    const barX = (LOGICAL_W - barW) / 2;
+    const barY = 215; // below HUD text area (score ~36, wave ~84), above gameplay
+
+    ctx.save();
+    ctx.globalAlpha = alpha;
+
+    // Dark shadow rect behind the red bar to prevent HUD text bleed-through
+    const padX = 12;
+    const padY = 8;
+    ctx.fillStyle = 'rgba(0,0,0,0.7)';
+    _roundRect(ctx, barX - padX, barY - padY, barW + padX * 2, barH + padY * 2, 10);
+    ctx.fill();
+
+    // Red opaque background bar
+    ctx.fillStyle = 'rgba(180,0,0,0.85)';
+    _roundRect(ctx, barX, barY, barW, barH, 8);
+    ctx.fill();
+
+    // Red border
+    ctx.strokeStyle = rgba(1, 0.1, 0.1, 0.9);
+    ctx.lineWidth = 2;
+    _roundRect(ctx, barX, barY, barW, barH, 8);
+    ctx.stroke();
+
+    // Warning text
+    ctx.font = 'bold 40px monospace';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = rgba(1, 0.95, 0.1); // bright yellow
+    ctx.shadowColor = 'rgba(0,0,0,0.8)';
+    ctx.shadowBlur = 8;
+    ctx.fillText('!! NUKE INCOMING !!', LOGICAL_W / 2, barY + barH / 2);
+    ctx.shadowBlur = 0;
 
     ctx.restore();
   }
