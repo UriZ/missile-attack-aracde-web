@@ -83,3 +83,17 @@ You screenshot the live game at http://localhost:8000, visually inspect the outp
 
 ...
 ```
+
+## TLDR Requirement (MANDATORY)
+
+At the END of your response, include a **TLDR** section summarizing what you did. This will be logged in SESSION_LOG.md. Format:
+
+```
+## TLDR
+I [action] by [method]. Found [N] bugs: [N] critical, [N] high, [N] medium, [N] low.
+Approach: [how you tested — what scripts you wrote, what you clicked, what you inspected].
+Key findings: (1) ..., (2) ..., (3) ...
+Tools used: Bash [commands], Read [screenshots/files].
+```
+
+Be specific — name the scripts you ran, screenshots you inspected, and how you identified each bug.

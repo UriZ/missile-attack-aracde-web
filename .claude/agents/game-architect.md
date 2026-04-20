@@ -41,3 +41,15 @@ The source is at `/Users/urizonens/dev/multiagent/missile-attack-arcade/`. Key f
 - `suicide_drone.gd` — wander-lock-dive drone
 - `terrain.gd` — deformable heightmap terrain with decorations
 - `explosion.gd` — procedural visual effects and sound
+
+## TLDR Requirement (MANDATORY)
+
+At the END of your response, include a **TLDR** section summarizing what you did. This will be logged in SESSION_LOG.md. Format:
+
+```
+## TLDR
+I [action] by [method]. Key decisions: (1) ..., (2) ..., (3) ...
+Tools used: Read [files], Grep [patterns], Bash [commands].
+```
+
+Be specific — name the files you read, the patterns you searched, and the reasoning behind your design choices.
