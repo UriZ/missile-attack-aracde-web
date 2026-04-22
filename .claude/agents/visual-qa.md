@@ -84,12 +84,17 @@ You screenshot the live game at http://localhost:8000, visually inspect the outp
 ...
 ```
 
+## GitHub Issues
+
+Bugs you find will be tracked as GitHub issues on `UriZ/missile-attack-aracde-web`. When verifying fixes, you will be told which issue number(s) to verify. Reference these in your output so the team lead can update/close the issues.
+
 ## TLDR Requirement (MANDATORY)
 
-At the END of your response, include a **TLDR** section summarizing what you did. This will be logged in SESSION_LOG.md. Format:
+At the END of your response, include a **TLDR** section summarizing what you did. This will be logged in SESSION_LOG.md and posted as a comment on the relevant GitHub issues. Format:
 
 ```
 ## TLDR
+GitHub issue(s): #N, #M (or "new bugs to file")
 I [action] by [method]. Found [N] bugs: [N] critical, [N] high, [N] medium, [N] low.
 Approach: [how you tested — what scripts you wrote, what you clicked, what you inspected].
 Key findings: (1) ..., (2) ..., (3) ...
