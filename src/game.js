@@ -62,6 +62,7 @@ export class Game {
 
     /** @type {import('./entities/entity.js').Entity|null} */
     this.lockedTarget = null;
+    this._targetAcquiredCooldown = 0;
 
     // Screen shake
     this.shakeIntensity = 0;
@@ -73,6 +74,10 @@ export class Game {
 
     // Delta time for UI banner rendering
     this._lastDt = 1 / 60;
+
+    // Radio chatter timer
+    this._chatterTimer = 0;
+    this._chatterInterval = 0;
 
     // Hide OS cursor
     canvas.style.cursor = 'none';
@@ -137,6 +142,9 @@ export class Game {
 
     // Start wave system
     this.waves.start();
+
+    this._resetChatterTimer();
+    this._chatterInterval = randf(3, 5); // first chatter comes early
   }
 
   // ── Per-frame ──────────────────────────────────────────────
@@ -205,6 +213,9 @@ export class Game {
       this._autoSelectLauncher();
     }
 
+    // Target-acquired cooldown
+    if (this._targetAcquiredCooldown > 0) this._targetAcquiredCooldown -= dt;
+
     // Heat-seeker lock target
     this._updateLockedTarget();
 
@@ -213,6 +224,16 @@ export class Game {
 
     // Game over check
     this._checkGameOver();
+
+    // Radio chatter
+    this._chatterTimer += dt;
+    if (this._chatterTimer >= this._chatterInterval) {
+      if (this.audio.playRadioChatter()) {
+        this._resetChatterTimer();
+      } else {
+        this._chatterTimer = this._chatterInterval - 1.0;
+      }
+    }
   }
 
   // ── Rendering ──────────────────────────────────────────────
@@ -389,6 +410,8 @@ export class Game {
       return;
     }
 
+    const prevLocked = this.lockedTarget;
+
     const mx = this.input.mouseX;
     const my = this.input.mouseY;
     const enemies = this.entities.getGroup('enemy_missiles');
@@ -405,6 +428,12 @@ export class Game {
     }
 
     this.lockedTarget = closest;
+
+    // "Target acquired" ping on new lock acquisition
+    if (this.lockedTarget && this.lockedTarget !== prevLocked && this._targetAcquiredCooldown <= 0) {
+      this.audio.playTargetAcquired();
+      this._targetAcquiredCooldown = 2.0;
+    }
   }
 
   // ── Enemy spawning ─────────────────────────────────────────
@@ -435,7 +464,7 @@ export class Game {
       targetX = randf(100, 2460);
     }
     const targetY = this.terrain ? this.terrain.getHeightAt(targetX) : 1240;
-    missile.launchTo(targetX, targetY, randf(2.0, 3.5));
+    missile.launchTo(targetX, targetY, randf(7.0, 10.0));
     this.entities.add(missile);
   }
 
@@ -510,5 +539,10 @@ export class Game {
       this.state = 'gameover';
       this._stopVulkanSpool();
     }
+  }
+
+  _resetChatterTimer() {
+    this._chatterInterval = randf(8, 15);
+    this._chatterTimer = 0;
   }
 }

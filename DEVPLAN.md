@@ -26,8 +26,9 @@
 - Heat-seeking missiles: increase tracking speed (`tracking_speed` from `3.0` → `5.5`) and increase base velocity slightly
 - Heat-seeker gravity: reduce from `50` → `30` so it stays on target better at angles
 - Goal: make intercepting with heat-seekers feel rewarding, while giving player more reaction time against enemy missiles
-- acquiring a target with heat seeking should be more dramatic and fun - the cursor shold be more reactvie
-- add the voice "pickle is hot" when a heat missile is acquired (when the cursor reacts)
+- acquiring a target with heat seeking should be more dramatic and fun - the cursor should change colors drastically on lock acquisition
+- play a "target acquired" audio cue (procedural synth beep/tone) when heat-seeker locks on — replace the old "pickle is hot" MP3 approach
+- remove pickle-hot.mp3 dependency; use procedural audio for the lock-on sound
 
 
 **Files:** `heat_seeking_missile.gd`, `main.gd` (`spawn_enemy_missile`)
@@ -96,7 +97,10 @@ add improvements to the terrain - add bridges, soldiers, civilian buildings , in
 - add sound for vulkan 
 
 ### 11 mega missile split 
-- create a new type of mega missle. when its hit, it splits into multiple smaller fragments than can cause damage 
+- create a new type of mega missle. when its hit, it splits into multiple smaller fragments than can cause damage and need to be shot down 
+
+### ui overhaul ##
+- improve the design of all the elements. it should be amazing and appealing and more realistic
 
 
 ### startup 

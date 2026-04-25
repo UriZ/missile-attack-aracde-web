@@ -7,8 +7,8 @@ import { Entity } from './entity.js';
 import { rgba, randf, lerp, lerpAngle } from '../utils.js';
 import { drawPoly } from './launcher.js';
 
-const GRAVITY = 50;
-const TRACKING_SPEED = 3.0;
+const GRAVITY = 30;
+const TRACKING_SPEED = 5.5;
 const OFF_SCREEN = { top: -100, bottom: 1540, left: -100, right: 2660 };
 const MAX_LIFETIME = 10.0;
 
@@ -60,7 +60,7 @@ export class HeatSeekingMissile extends Entity {
   launchTo(targetX, targetY, lockedTarget = null) {
     const dx = targetX - this.x;
     const dy = targetY - this.y;
-    const launchTime = 1.5;
+    const launchTime = 1.2;
     this.vx = dx / launchTime;
     this.vy = (dy - 0.5 * GRAVITY * launchTime * launchTime) / launchTime;
 

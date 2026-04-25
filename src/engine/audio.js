@@ -107,6 +107,11 @@ export class Audio {
     this.spoolLoopBuffer = null;
     this.vulkanShotBuffer = null;
     this.nukeWarningBuffer = null;
+    this.targetAcquiredBuffer = null;
+
+    this.radioChatterBuffers = [];
+    this._radioChatterLoaded = false;
+    this._chatterPlaying = false;
 
     this._initialized = false;
   }
@@ -133,6 +138,60 @@ export class Audio {
     this.spoolLoopBuffer = this._generateSpoolBuffer();
     this.vulkanShotBuffer = this._generateVulkanShotBuffer();
     this.nukeWarningBuffer = this._generateNukeWarningBuffer();
+    this.targetAcquiredBuffer = this._generateTargetAcquiredBuffer();
+
+    this._loadRadioChatter();
+  }
+
+  async _loadRadioChatter() {
+    const RADIO_DIR = 'assets/radio/';
+    let filenames = [];
+
+    try {
+      // Try fetching directory listing (works with most static HTTP servers)
+      const response = await fetch(RADIO_DIR);
+      if (response.ok) {
+        const html = await response.text();
+        // Parse HTML directory listing for .mp3 links
+        const regex = /href="([^"]+\.mp3)"/gi;
+        let match;
+        while ((match = regex.exec(html)) !== null) {
+          // Extract just the filename (strip any path prefix)
+          const filename = match[1].split('/').pop();
+          filenames.push(filename);
+        }
+      }
+    } catch (e) {
+      console.warn('Could not fetch radio directory listing:', e);
+    }
+
+    // Fallback: hardcoded list if directory listing didn't work
+    if (filenames.length === 0) {
+      filenames = [
+        'on-my-six.mp3', 'live-one.mp3', 'tango.mp3', 'fox-two.mp3',
+        'bogie.mp3', 'canopy.mp3', 'eyes-on-sky.mp3', 'breaks.mp3',
+      ];
+    }
+
+    // Load all discovered clips in parallel
+    const results = await Promise.allSettled(
+      filenames.map(async (name) => {
+        const resp = await fetch(RADIO_DIR + name);
+        if (!resp.ok) throw new Error(`HTTP ${resp.status} for ${name}`);
+        const arrayBuffer = await resp.arrayBuffer();
+        return this.audioCtx.decodeAudioData(arrayBuffer);
+      })
+    );
+
+    for (const result of results) {
+      if (result.status === 'fulfilled') {
+        this.radioChatterBuffers.push(result.value);
+      } else {
+        console.warn('Failed to load radio clip:', result.reason);
+      }
+    }
+
+    this._radioChatterLoaded = this.radioChatterBuffers.length > 0;
   }
 
   // -----------------------------------------------------------------------
@@ -186,6 +245,53 @@ export class Audio {
   playNukeWarning(x) {
     if (!this.audioCtx) return;
     this._playBuffer(this.nukeWarningBuffer, 8.0, 1.0, panFromX(x));
+  }
+
+  /**
+   * Procedural "target acquired" ascending radar-ping cue (~0.3s).
+   * Two quick beeps ascending in pitch with slight reverb tail, military/tactical feel.
+   */
+  playTargetAcquired() {
+    if (!this.audioCtx) return;
+    this._playBuffer(this.targetAcquiredBuffer, 6.0, randf(0.97, 1.03), 0);
+  }
+
+  /**
+   * Play a random radio chatter clip. Returns true if playback started,
+   * false if unavailable or already playing (caller should back off).
+   * @returns {boolean}
+   */
+  playRadioChatter() {
+    if (!this.audioCtx || !this._radioChatterLoaded || this._chatterPlaying) return false;
+
+    const buffer = this.radioChatterBuffers[
+      Math.floor(Math.random() * this.radioChatterBuffers.length)
+    ];
+
+    const volumeDb = 8.0;
+    const pitch = randf(0.94, 1.06);
+    const pan = randf(-0.3, 0.3);
+
+    this._chatterPlaying = true;
+
+    const ctx = this.audioCtx;
+    const source = ctx.createBufferSource();
+    const gain = ctx.createGain();
+    const panner = ctx.createStereoPanner();
+
+    source.buffer = buffer;
+    source.playbackRate.value = pitch;
+    gain.gain.value = Math.pow(10, volumeDb / 20);
+    panner.pan.value = pan;
+
+    source.connect(gain);
+    gain.connect(panner);
+    panner.connect(ctx.destination);
+
+    source.onended = () => { this._chatterPlaying = false; };
+    source.start();
+
+    return true;
   }
 
   /**
@@ -583,6 +689,68 @@ export class Audio {
 
     // Crossfade loop boundaries to prevent noise click
     applyLoopCrossfade(samples, LOOP_FADE_SAMPLES);
+
+    return this._createBuffer(samples, sampleRate);
+  }
+
+  // -- Target-acquired radar ping (procedural, ~0.3s) -----------------------
+  _generateTargetAcquiredBuffer() {
+    const sampleRate = 22050;
+    // Two beeps: beep1 starts at 0, beep2 starts at 0.13s; total ~0.30s
+    const duration = 0.30;
+    const numSamples = Math.floor(sampleRate * duration);
+    const samples = new Float32Array(numSamples);
+
+    // Beep parameters: freq, start time, duration each
+    const beeps = [
+      { freq: 1200, start: 0.000, dur: 0.085 },
+      { freq: 1900, start: 0.130, dur: 0.085 },
+    ];
+
+    for (let i = 0; i < numSamples; i++) {
+      const t = i / sampleRate;
+      let val = 0;
+
+      for (const beep of beeps) {
+        const bt = t - beep.start;
+        if (bt < 0 || bt >= beep.dur) continue;
+
+        // Envelope: fast attack (2ms), short sustain, decay + reverb tail
+        const attackTime = 0.002;
+        const sustainEnd = beep.dur * 0.55;
+        let env;
+        if (bt < attackTime) {
+          env = bt / attackTime;
+        } else if (bt < sustainEnd) {
+          env = 1.0;
+        } else {
+          // Exponential decay into reverb tail
+          const decayT = bt - sustainEnd;
+          const decayLen = beep.dur - sustainEnd;
+          env = Math.exp(-5.5 * (decayT / decayLen));
+        }
+
+        // Pure sine tone — clean radar ping
+        const tone = Math.sin(TAU * beep.freq * bt) * 0.55;
+
+        // Faint 2nd harmonic for slight metallic sheen
+        const harmonic = Math.sin(TAU * beep.freq * 2.0 * bt) * 0.12;
+
+        // Very brief click transient on attack to cut through radio noise
+        const click = bt < 0.003 ? (1.0 - bt / 0.003) * randf(-0.08, 0.08) : 0.0;
+
+        val += (tone + harmonic + click) * env;
+      }
+
+      // Soft limit — pings should be clean, not saturated
+      samples[i] = Math.tanh(val * 1.2) / Math.tanh(1.2);
+    }
+
+    // Brief fade-out on the last 8ms to avoid hard clip at buffer end
+    const tailSamples = Math.floor(sampleRate * 0.008);
+    for (let i = 0; i < tailSamples; i++) {
+      samples[numSamples - 1 - i] *= i / tailSamples;
+    }
 
     return this._createBuffer(samples, sampleRate);
   }
