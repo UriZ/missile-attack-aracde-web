@@ -596,3 +596,48 @@ Total cost: ~176k tokens across architect + 2 developers + QA + 1 fix round.
 ### Commit Summary
 
 Commit `a5a6ad7` pushed to `main`. 13 files changed, +1612 / -519 lines.
+
+---
+
+## Iteration 7: Heat-Seeker & Enemy Missile Tuning (GitHub #12)
+
+### Phase 1: Architect Design
+
+**[Team Lead → game-architect "architect-heatseeker"]**
+- **Agent type**: `game-architect`
+- **Task**: Design implementation spec for DEVPLAN #3 — enemy missile speed, heat-seeker tracking/gravity, dramatic cursor, "pickle is hot" audio
+- **GitHub issues**: #12
+- **Duration**: ~177s, 18 tool uses, 63k tokens
+
+**[architect-heatseeker → Team Lead] — COMPLETED**
+- 5 changes designed with exact file/line/value specs
+- **Agent TLDR**: Read heat-seeking-missile.js, heat-seeking-launcher.js, enemy-missile.js, ui.js, audio.js, game.js (web version) and heat_seeking_missile.gd, main.gd (Godot reference). Identified current values and designed: (1) enemy missile launchTime randf(2.0,3.5)→randf(5.0,7.5), (2) TRACKING_SPEED 3.0→5.5 + launchTime 1.5→1.2, (3) GRAVITY 50→30, (4) dramatic lock-on cursor with pulse/color-shift/flash/particles, (5) "pickle is hot" radio voice synthesis via formant harmonics + syllable envelope + radio band-pass + squelch. Flagged potential issues: flatter trajectory with lower gravity, aggressive tracking at 5.5, enemy missiles significantly slower than Godot original.
+
+| Change | File | Current → New |
+|--------|------|---------------|
+| Enemy missile speed | game.js:438 | randf(2.0, 3.5) → randf(5.0, 7.5) |
+| Tracking speed | heat-seeking-missile.js:11 | 3.0 → 5.5 |
+| Gravity | heat-seeking-missile.js:10 | 50 → 30 |
+| Launch velocity | heat-seeking-missile.js:63 | 1.5 → 1.2 |
+| Lock-on FX | ui.js | Static → pulsing/color-shift/flash/particles |
+| Pickle hot audio | audio.js | (new) radio-chatter synthesis |
+| Trigger | game.js | (new) lock acquisition detection + cooldown |
+
+---
+
+### Phase 2: Developer Implementation (Parallel)
+
+**[Team Lead → senior-game-developer "dev-vulkan-fix"]**
+- **Agent type**: `senior-game-developer`
+- **Task**: Fix Vulkan cannon rotation — base/motor housing fixed, barrel assembly tracks target
+- **GitHub issues**: #13
+
+**[Team Lead → game-developer "dev-heatseeker-constants"]**
+- **Agent type**: `game-developer`
+- **Task**: Enemy missile launchTime, heat-seeker TRACKING_SPEED, GRAVITY, launch velocity
+- **GitHub issues**: #12
+
+**[Team Lead → senior-game-developer "dev-heatseeker-fx"]**
+- **Agent type**: `senior-game-developer`
+- **Task**: Dramatic lock-on crosshair effects + "pickle is hot" radio voice audio + trigger in game.js
+- **GitHub issues**: #12

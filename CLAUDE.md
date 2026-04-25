@@ -89,6 +89,17 @@ gh issue close NUMBER --comment "Verified by QA"
 - Team lead updates the issues with agent TLDRs after completion
 - The session log snapshots should reference issue numbers, not internal task IDs
 
+## Testing (MANDATORY)
+
+All code changes MUST be tested before being considered complete. Developers must:
+
+1. **Verify the game loads** — Run the game in a browser (or headless via Puppeteer) and confirm no console errors
+2. **Test the specific change** — Manually verify the feature works or the bug is fixed
+3. **Check for regressions** — Confirm existing functionality still works (launchers fire, enemies spawn, collisions detect, audio plays)
+4. **Edge cases** — Test boundary conditions (e.g., what happens at wave 1 vs wave 20, empty states, rapid input)
+
+QA agents must include test results in their issue comments. Developer agents should note what they tested in their TLDR.
+
 ## Session Logging (MANDATORY)
 
 All multi-agent work MUST also be logged to `SESSION_LOG.md` in the project root. This complements GitHub issues with detailed inter-agent communication.
