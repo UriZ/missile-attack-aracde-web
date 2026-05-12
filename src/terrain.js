@@ -33,8 +33,9 @@ export class Terrain extends Entity {
   /**
    * @param {number} baseY - world Y position of the terrain top edge
    * @param {import('./engine/renderer.js').Renderer} renderer
+   * @param {import('./biome.js').BiomeSystem|null} [biomeSystem]
    */
-  constructor(baseY, renderer) {
+  constructor(baseY, renderer, biomeSystem = null) {
     super(0, baseY);
     this.groups.add('terrain');
 
@@ -78,6 +79,14 @@ export class Terrain extends Entity {
     /** @type {import('./day-night.js').DayNightCycle | null} */
     this._dayNight = null;
 
+    /** @type {import('./biome.js').BiomeSystem | null} */
+    this._biomeSystem = biomeSystem;
+
+    // Height modifiers from biome
+    const mods = biomeSystem ? biomeSystem.getHeightmapModifiers() : null;
+    this._biomeAmpScale  = mods ? mods.amplitudeScale  : 1;
+    this._biomeFreqScale = mods ? mods.frequencyScale  : 1;
+
     this._generateHeights();
     this.spawnDecorations();
   }
@@ -102,14 +111,17 @@ export class Terrain extends Entity {
     const phase2 = Math.random() * TAU;
     const phase3 = Math.random() * TAU;
 
+    const ampScale  = this._biomeAmpScale  || 1;
+    const freqScale = this._biomeFreqScale || 1;
+
     for (let i = 0; i < n; i++) {
       const x = i * TERRAIN_RESOLUTION;
 
-      // Layered sine hills
+      // Layered sine hills — scaled by biome modifiers
       let h = 0;
-      h += Math.sin(x * 0.004 + phase1) * 18;
-      h += Math.sin(x * 0.011 + phase2) * 8;
-      h += Math.sin(x * 0.025 + phase3) * 3.5;
+      h += Math.sin(x * 0.004 * freqScale + phase1) * 18 * ampScale;
+      h += Math.sin(x * 0.011 * freqScale + phase2) * 8  * ampScale;
+      h += Math.sin(x * 0.025 * freqScale + phase3) * 3.5 * ampScale;
 
       // Flatten near launcher positions
       let flattenFactor = 1;
@@ -328,14 +340,25 @@ export class Terrain extends Entity {
 
   /**
    * Override draw to use adjusted Y for offscreen blit.
+   * Applies biome terrain filter if active.
    */
   draw(ctx) {
     if (this.dirty || !this._offscreen) {
       this._renderToOffscreen();
       this.dirty = false;
     }
-    // Blit offscreen: the offscreen has 300px headroom above terrain
-    ctx.drawImage(this._offscreen.canvas, 0, this.baseY - 300);
+    // Apply biome ctx.filter on the terrain blit only
+    const biomeFilter = this._biomeSystem ? this._biomeSystem.getTerrainFilter() : null;
+    if (biomeFilter && 'filter' in ctx) {
+      ctx.save();
+      ctx.filter = biomeFilter;
+      ctx.drawImage(this._offscreen.canvas, 0, this.baseY - 300);
+      ctx.filter = 'none';
+      ctx.restore();
+    } else {
+      // Blit offscreen: the offscreen has 300px headroom above terrain
+      ctx.drawImage(this._offscreen.canvas, 0, this.baseY - 300);
+    }
   }
 
   _drawGround(ctx) {

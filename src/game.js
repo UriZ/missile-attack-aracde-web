@@ -24,6 +24,7 @@ import { Paratrooper } from './entities/paratrooper.js';
 import { Explosion } from './explosion.js';
 import { Crater } from './crater.js';
 import { DayNightCycle } from './day-night.js';
+import { BiomeSystem } from './biome.js';
 import { rgba, lerp, randf, dist } from './utils.js';
 
 // Launcher spawn positions (from main.gd / SCENE_DATA)
@@ -68,6 +69,9 @@ export class Game {
     /** @type {DayNightCycle} */
     this.dayNight = new DayNightCycle();
 
+    /** @type {BiomeSystem} */
+    this.biomeSystem = new BiomeSystem();
+
     /** @type {import('./entities/entity.js').Entity|null} */
     this.lockedTarget = null;
     this._targetAcquiredCooldown = 0;
@@ -103,6 +107,10 @@ export class Game {
       if (this.terrain) this.terrain.recovering = false;
       // Advance day/night cycle to target tod for this wave
       this.dayNight.setWave(wave);
+      // Stormy biome: force rain weather every wave
+      if (this.biomeSystem._def && this.biomeSystem._def.id === 'stormy') {
+        this.dayNight._weatherType = 'rain';
+      }
     };
     this.waves.onWaveComplete = (wave) => {
       this.ui.showWaveBanner(`WAVE ${wave} CLEAR`, rgba(0.2, 0.9, 0.3));
@@ -130,8 +138,13 @@ export class Game {
     this._vulkanSpoolLoop = null;
     this._vulkanWasFiring = false;
 
-    // Create terrain
-    this.terrain = new Terrain(1240, this.renderer);
+    // Pick biome for this game and wrap the day-night cycle
+    this.biomeSystem.pickRandom();
+    this.dayNight = new DayNightCycle();
+    this.dayNight = this.biomeSystem.wrapDayNight(this.dayNight);
+
+    // Create terrain — pass biomeSystem so it can scale heights and apply filter
+    this.terrain = new Terrain(1240, this.renderer, this.biomeSystem);
     this.entities.add(this.terrain);
 
     // Spawn launchers
@@ -192,6 +205,9 @@ export class Game {
 
   /** @param {number} dt */
   _updatePlaying(dt) {
+    // Update biome particles / effects
+    this.biomeSystem.update(dt, this.audio);
+
     // Update day/night cycle
     const waveDuration = this.waves._waveDuration || 20;
     const waveProgress = waveDuration > 0 ? Math.min(this.waves.waveTimer / waveDuration, 1) : 0;
@@ -366,8 +382,18 @@ export class Game {
       this.dayNight.drawCelestialBody(ctx);
       this.dayNight.drawClouds(ctx, this._lastDt);
 
-      // Game world (with shake)
+      // Biome behind-terrain effects (e.g. riverside water band)
+      this.biomeSystem.drawBehindTerrain(ctx, this.terrain);
+
+      // Game world (with shake) — terrain, entities
       this.entities.draw(ctx);
+
+      // Biome front-of-terrain effects (snow, rain, shimmer, lightning, lens flare)
+      // Drawn in UI space (no shake) so particles cover the full screen cleanly
+      if (this.state === 'playing') {
+        r.beginUI();
+        this.biomeSystem.drawFrontOfTerrain(ctx);
+      }
 
       // Weather overlay — drawn after entities, before UI (no shake for weather)
       if (this.state === 'playing') {
@@ -561,7 +587,7 @@ export class Game {
       targetX = randf(100, 2460);
     }
     const targetY = this.terrain ? this.terrain.getHeightAt(targetX) : 1240;
-    missile.launchTo(targetX, targetY, randf(7.0, 10.0));
+    missile.launchTo(targetX, targetY, randf(8.0, 12.0));
     this.entities.add(missile);
   }
 

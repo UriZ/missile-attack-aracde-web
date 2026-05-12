@@ -295,6 +295,63 @@ export class Audio {
   }
 
   /**
+   * Thunder rumble — low-frequency sweep 80Hz→20Hz over 1.5s.
+   * Sawtooth wave layered with filtered noise.
+   */
+  playThunder() {
+    if (!this.audioCtx) return;
+    const ctx = this.audioCtx;
+    const now = ctx.currentTime;
+
+    // Sawtooth oscillator sweep
+    const osc = ctx.createOscillator();
+    const oscGain = ctx.createGain();
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(80, now);
+    osc.frequency.linearRampToValueAtTime(20, now + 1.5);
+    oscGain.gain.setValueAtTime(0.001, now);
+    oscGain.gain.linearRampToValueAtTime(0.5, now + 0.05);  // fast attack
+    oscGain.gain.setValueAtTime(0.5, now + 1.0);             // sustain
+    oscGain.gain.linearRampToValueAtTime(0, now + 1.5);      // decay
+    osc.connect(oscGain);
+    oscGain.connect(ctx.destination);
+    osc.start(now);
+    osc.stop(now + 1.5);
+
+    // Noise layer through bandpass at 60Hz
+    const noiseBuffer = this._generateThunderNoiseBuffer();
+    const noiseSource = ctx.createBufferSource();
+    const bpf = ctx.createBiquadFilter();
+    const noiseGain = ctx.createGain();
+
+    noiseSource.buffer = noiseBuffer;
+    bpf.type = 'bandpass';
+    bpf.frequency.value = 60;
+    bpf.Q.value = 0.8;
+    noiseGain.gain.value = 0.25;
+
+    noiseSource.connect(bpf);
+    bpf.connect(noiseGain);
+    noiseGain.connect(ctx.destination);
+    noiseSource.start(now);
+    noiseSource.stop(now + 1.5);
+  }
+
+  _generateThunderNoiseBuffer() {
+    const sampleRate = 22050;
+    const numSamples = Math.floor(sampleRate * 1.5);
+    const samples = new Float32Array(numSamples);
+    for (let i = 0; i < numSamples; i++) {
+      const progress = i / numSamples;
+      const env = progress < 0.03 ? progress / 0.03
+                : progress < 0.67 ? 1.0
+                : 1.0 - (progress - 0.67) / 0.33;
+      samples[i] = (Math.random() * 2 - 1) * env;
+    }
+    return this._createBuffer(samples, sampleRate);
+  }
+
+  /**
    * Start heat-seeker motor loop. Returns a SoundLoop handle.
    * @param {number} x — world x
    * @returns {SoundLoop}

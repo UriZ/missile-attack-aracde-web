@@ -355,6 +355,25 @@ export class DayNightCycle {
   }
 
   /**
+   * Returns the current sun position for lens-flare effects.
+   * Returns null when the sun is not visible (night / twilight).
+   * @returns {{ x: number, y: number, alpha: number } | null}
+   */
+  getSunPosition() {
+    const tod = this.tod;
+    if (tod < 0.12 || tod > 0.80) return null;
+    const t = (tod - 0.12) / (0.80 - 0.12);
+    return {
+      x:     LOGICAL_W * t,
+      y:     900 - Math.sin(t * Math.PI) * 780,
+      alpha: Math.min(
+        Math.min((tod - 0.12) / 0.08, 1),
+        Math.min((0.80 - tod) / 0.08, 1)
+      ),
+    };
+  }
+
+  /**
    * Window light factor: 1.0 at night (all windows lit), 0.0 at midday.
    * @returns {number} 0..1
    */

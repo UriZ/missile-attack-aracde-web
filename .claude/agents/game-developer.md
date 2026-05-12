@@ -20,6 +20,11 @@ You are a **Game Developer** on a team reimplementing a Godot arcade missile def
 - New project: `/Users/urizonens/dev/multiagent/missile-attack-arcade-web/`
 - Original Godot source (reference): `/Users/urizonens/dev/multiagent/missile-attack-arcade/`
 
+## Key File Paths
+
+- Audio engine: `src/engine/audio.js` (NOT `src/audio.js`)
+- Renderer: `src/renderer.js` — call `r.beginUI()` to reset canvas transform to non-shaken space for overlays
+
 ## Key Guidelines
 
 - Read the original GDScript source to understand exact behavior before implementing

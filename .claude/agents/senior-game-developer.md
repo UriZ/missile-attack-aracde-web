@@ -29,6 +29,11 @@ You are a **Senior Game Developer** on a team reimplementing a Godot arcade miss
 - **Collision Detection**: Area-based (circle/rect) matching Godot's Area2D overlap detection
 - **Screen Shake**: Camera offset with decay, applied to canvas transform
 
+## Key File Paths
+
+- Audio engine: `src/engine/audio.js` (NOT `src/audio.js`)
+- Renderer: `src/renderer.js` — call `r.beginUI()` to reset canvas transform to non-shaken space for overlays
+
 ## Key Guidelines
 
 - Match the original game's feel precisely — timings, speeds, physics constants

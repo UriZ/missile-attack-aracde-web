@@ -7,7 +7,7 @@ import { Entity } from './entity.js';
 import { rgba, randf } from '../utils.js';
 import { drawPoly } from './launcher.js';
 
-const GRAVITY = 200;
+const GRAVITY = 120;
 const OFF_SCREEN = { bottom: 1600, left: -100, right: 2660 };
 
 // Polygon data from SCENE_DATA §7

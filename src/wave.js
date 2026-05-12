@@ -77,10 +77,9 @@ export class WaveSystem {
     const events = [];
     const rng = () => Math.random();
 
-    // ── Difficulty budget: increases with wave ──
-    // Each enemy type costs a certain amount of budget.
-    // Budget grows per wave, forcing more/harder enemies over time.
-    const budget = 6 + wave * 4;
+    // ── Difficulty budget: randomized ±30% so waves feel different ──
+    const baseBudget = 6 + wave * 4;
+    const budget = Math.round(baseBudget * (0.7 + rng() * 0.6));
 
     const costs = {
       missile:         1,
@@ -91,41 +90,64 @@ export class WaveSystem {
       nuke:            6,
     };
 
-    // ── Determine enemy pool for this wave ──
-    const pool = ['missile'];
-    if (wave >= 2) pool.push('super_missile');
-    if (wave >= 2) pool.push('drone');
-    if (wave >= 3) pool.push('suicide_drone');
-    if (wave >= 1) pool.push('transport_plane');
-    if (wave >= 3) pool.push('nuke');
+    // ── Weighted pool with jittered unlock thresholds ──
+    // Each entry: [type, minWave, weight]
+    // Weight controls how likely each type is to be picked
+    const poolDefs = [
+      ['missile',         1, 3],
+      ['transport_plane', 1, 1],
+      ['super_missile',   2, 2],
+      ['drone',           2, 2],
+      ['suicide_drone',   3, 2],
+      ['nuke',            3, 1],
+    ];
+
+    // Build weighted pool — jitter thresholds by ±1 wave for variety
+    const pool = [];
+    const weights = [];
+    for (const [type, minWave, weight] of poolDefs) {
+      const jitter = minWave <= 1 ? 0 : (rng() < 0.3 ? -1 : rng() < 0.15 ? 1 : 0);
+      if (wave >= minWave + jitter) {
+        pool.push(type);
+        // Missiles become less dominant in later waves
+        const w = type === 'missile' ? Math.max(1, weight - Math.floor(wave / 4)) : weight;
+        weights.push(w);
+      }
+    }
+
+    // Weighted random selection helper
+    const totalWeight = weights.reduce((a, b) => a + b, 0);
+    const pickRandom = () => {
+      let r = rng() * totalWeight;
+      for (let i = 0; i < pool.length; i++) {
+        r -= weights[i];
+        if (r <= 0) return pool[i];
+      }
+      return pool[pool.length - 1];
+    };
 
     // ── Spend the budget randomly ──
     let remaining = budget;
 
-    // Guarantee minimums: at least a few missiles every wave
-    const minMissiles = Math.min(3 + wave, 10);
+    // Small guaranteed minimum — just 2 missiles so there's always something
+    const minMissiles = Math.min(2, budget);
     for (let i = 0; i < minMissiles; i++) {
       events.push({ time: 0, type: 'missile' });
       remaining -= costs.missile;
     }
 
-    // Guarantee at least 1 nuke from wave 3+
-    if (wave >= 3) {
+    // Maybe a nuke from wave 3+ (50-70% chance, not guaranteed every wave)
+    if (wave >= 3 && rng() < 0.5 + wave * 0.025) {
       events.push({ time: 0, type: 'nuke' });
       remaining -= costs.nuke;
-      if (wave >= 8 && rng() < 0.5) {
-        events.push({ time: 0, type: 'nuke' });
-        remaining -= costs.nuke;
-      }
     }
 
-    // Fill remaining budget with random picks from pool
+    // Fill remaining budget with weighted random picks
     let safety = 100;
     while (remaining > 0 && safety-- > 0) {
-      const type = pool[Math.floor(rng() * pool.length)];
+      const type = pickRandom();
       const cost = costs[type];
       if (cost > remaining) {
-        // Can't afford this, try missile (cheapest)
         if (remaining >= costs.missile) {
           events.push({ time: 0, type: 'missile' });
           remaining -= costs.missile;
