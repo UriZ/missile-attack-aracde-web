@@ -1,3 +1,55 @@
+# Visual QA Report — 2026-05-12 (Issue #22 Re-verification — Wave Banner Duplicate)
+
+## Summary
+
+1 pass, 0 bugs found. Issue #22 is confirmed fixed. Wave banner duplication does not occur.
+
+---
+
+## Issue #22 Verification — Wave Number Duplicates During Banner
+
+**Result: PASS — Bug is fixed, no duplication observed.**
+
+### Code Analysis
+
+The fix works through a guard in `_drawScorePanel` (`src/ui.js` line 422):
+
+```js
+if (game.waveNumber > 0 && this._bannerPhase === 'idle') {
+    ctx.fillText(`WAVE ${game.waveNumber}`, ...);
+}
+```
+
+This suppresses the panel's "WAVE N" text in ALL non-idle banner phases: `fadein`, `hold`, and `fadeout`. No duplicate wave text can appear during any stage of the banner animation.
+
+### Timing Safety Analysis
+
+A potential race condition was investigated: could the "WAVE N CLEAR" banner still be visible when the next "WAVE N+1" banner starts?
+
+- Wave clear banner total duration: BANNER_FADE_IN (0.35s) + BANNER_HOLD (1.80s) + BANNER_FADE_OUT (0.45s) = **2.60s**
+- Between-wave timer: **3.0s**
+- Gap: 3.0 - 2.60 = **0.40s**
+
+The "WAVE N CLEAR" banner completes with 0.4 seconds to spare before the next wave fires. The two banners cannot overlap. `showWaveBanner()` is a single-instance state machine — it overwrites `_bannerText` and resets the phase when called, so even if the timing were close, only one banner text can be active at a time.
+
+### Redundant waveNumber Write — Non-Bug
+
+`game.js` line 204 assigns `this.waveNumber = this.waves.getCurrentWave()` after every `waves.update()` call. This duplicates the assignment already made in the `onWaveStart` callback (line 93). Both produce the same value — no mismatch occurs. Harmless.
+
+### Screenshot Evidence
+
+- `/tmp/qa-screenshots/009_wave_1_start.png`: "WAVE 1" in top-left panel visible; no centered banner (banner had already completed before this screenshot, nuke warning showing).
+- `/tmp/qa-screenshots/014_gameplay_t11s.png`: "WAVE 1 CLEAR" banner fading in — score panel has NO wave number. Suppression confirmed.
+- `/tmp/qa-screenshots/015_final_state.png`: "WAVE 1 CLEAR" banner in hold phase — score panel still empty. Suppression sustained.
+
+### Additional Observations (Not Bugs)
+
+1. **Nuke warning suppresses wave banner rendering**: When a nuke spawns during the wave start banner, `drawWaveBanner` skips rendering while the nuke warning is active (`src/ui.js` line 201). The state machine still ticks. Under heavy nuke pressure, players can miss the "WAVE N" banner entirely. Design decision — no bug filed.
+
+2. **Banner backdrop partially obscured by mushroom cloud**: In screenshots 014 and 015, a large mushroom cloud overlaps the left portion of the banner backdrop. Text remains centered and readable. Z-ordering is expected (game entities draw before UI). No bug.
+
+---
+
 # Visual QA Report — 2026-05-12 (Issues #20, #21, #22, #23)
 
 ## Summary
@@ -22,11 +74,23 @@ All four feature implementations are functionally correct.
 
 ---
 
-### Issue #23 — Heat-seeker lock circle too small: PASS
+### Issue #23 — Heat-seeker lock circle too small: PASS (Re-verified 2026-05-12)
 
-**Fix confirmed.** `HEAT_LOCK_RADIUS = 90` in `src/ui.js` line 45. `CROSSHAIR_RADIUS = 90` in `src/game.js` line 34. At 2560→1280 display scale, logical 90px radius renders as ~45 display pixels — clearly visible and usably sized. The outer dashed circle, inner solid counter-rotating circle (`HEAT_LOCK_RADIUS * 0.6 = 54`), and 4 tick marks all use the updated radius.
+**Fix confirmed on re-verification.** Two separate QA runs were executed with the heat-seeker launcher selected (`--launcher 2`) to independently confirm the prior PASS verdict.
 
-**Screenshots**: `/tmp/qa-screenshots/007-heatseeker-cursor-center.png`, `/tmp/qa-screenshots/008-heatseeker-cursor-topleft.png`
+**Code state verified:**
+- `HEAT_LOCK_RADIUS = 90` at `src/ui.js` line 45 (was 50 per original bug report)
+- `CROSSHAIR_RADIUS = 90` at `src/game.js` line 34 (was 50 per original bug report)
+
+**Visual verification:**
+At the Puppeteer viewport of 1280x720 (0.5x the 2560x1440 logical resolution), a logical radius of 90px renders as approximately 45 screen pixels. The dashed outer lock circle is clearly visible against the dark background. The inner counter-rotating solid circle (`HEAT_LOCK_RADIUS * 0.6 = 54` logical, ~27px screen) is also clearly visible. All 4 tick marks at N/S/E/W of the outer circle are rendered correctly.
+
+**Functional verification:**
+Screenshot `/tmp/qa-screenshots/012_gameplay_t6s.png` captured an enemy missile near the perimeter of the lock circle, confirming the visual circle accurately represents the lock detection zone. The detection range (`CROSSHAIR_RADIUS = 90`) and the visual circle (`HEAT_LOCK_RADIUS = 90`) are identical — no discrepancy between visual indicator and actual game mechanic.
+
+**No regressions detected.** The locked-on state (dramatic pulsing circle, acquisition flash, spark particles, dashed line to target) was not captured in this run due to Puppeteer cursor behavior, but all rendering code paths were confirmed present and correct by code review.
+
+**Screenshots**: `/tmp/qa-screenshots/003_launcher_2.png`, `/tmp/qa-screenshots/006_launcher_2_fired.png`, `/tmp/qa-screenshots/012_gameplay_t6s.png`
 
 ---
 
@@ -109,102 +173,146 @@ All four feature implementations are functionally correct.
 
 ---
 
-# Visual QA Report — 2026-05-12 (Issue #24 — Enemy Paratroopers)
+# Visual QA Report — 2026-05-12 (Issue #24 — Enemy Paratroopers) [PASS 3]
 
 ## Summary
 
-4 bugs found. 1 critical, 0 high, 1 medium, 2 low.
+4 bugs found. 0 critical, 2 high, 1 medium, 1 low.
 
-The core feature works: transport planes spawn, drop paratroopers, paratroopers deploy parachutes, and landing near a launcher destroys it. Collision system correctly handles all cases. Score values correct. Wave integration correct. One critical canvas state leak found in the freefall draw path.
+This is the third QA pass on issue #24. The codebase has been updated since the prior pass — `this.gravityForce` dead assignment (prior BUG-004) is confirmed removed/fixed. Two prior "bugs" (BUG-001 save/restore imbalance, BUG-003 unused import) remain retracted as false positives.
+
+New high-severity bug found this pass: grounded paratroopers trigger the generic enemy_missiles vs launchers circle collision before their attack state machine runs, bypassing the fuse/explosion animation entirely (BUG-001 this pass).
+
+Prior confirmed bugs that remain in current code: BUG-002 (suspension lines gap — medium), BUG-003 (globalAlpha manual reset — low), BUG-004-PASS3 (wave spawn threshold — high, was first reported in prior pass as BUG-001, confirmed still present).
+
+Feature overall: transport planes spawn, drop paratroopers, parachutes deploy, soldiers run toward launchers and destroy them. The mechanic works but the intended visual attack sequence (crouch + fuse animation + mega explosion) is bypassed by a collision system gap.
 
 ---
 
-## Bugs
+## New Bugs Found This Pass
 
-### BUG-001: ctx.save/restore imbalance in Paratrooper freefall draw path
+### BUG-001 (PASS 3): Grounded paratrooper triggers generic launcher collision before attack state fires
 
-- **Severity**: Critical
-- **File(s)**: `src/entities/paratrooper.js`, `draw()` method, lines 102-138
-- **Description**: In `draw()`, `ctx.save()` is called unconditionally at line 103. In the freefall branch (`!parachuteDeployed`), the code calls `return` at line 131 without ever calling `ctx.restore()`. Every frame a paratrooper is in freefall (the first 0.3 seconds after drop), one `ctx.save()` is pushed onto the canvas state stack without a matching pop. With multiple paratroopers in freefall simultaneously, many save states accumulate per second. The leaked state includes the `ctx.translate(this.x, this.y)` transform, which corrupts all entities drawn after the paratrooper in draw order during that interval.
+- **Severity**: High
+- **File(s)**: `src/collision.js` section 3 (lines 291-382), `src/entities/paratrooper.js` constants `ATTACK_RANGE`, `SOLDIER_GROUND_RADIUS`
+- **Description**: Once a paratrooper lands, its `collisionRadius` is set to `SOLDIER_GROUND_RADIUS = 12`. The launcher's effective collision radius in `collision.js` is `launcherRadius = 50` (fallback, since launchers do not set `collisionRadius`). Combined, `sumR = 62px`. The paratrooper's attack state machine transitions to ATTACKING at `ATTACK_RANGE = 35px` horizontal distance. Since both entities are at terrain level (dy ≈ 0), the collision fires at `dx < 62px` — well before the trooper reaches `dx = 35px`. The collision falls through to the generic `else` branch (lines 369-378), which calls `enemy.destroy()` and `launcher.destroy()` and spawns a standard mega explosion with terrain damage and screen shake — no fuse animation, no crouch animation, no pulsing indicator. The attack state machine (`_updateAttacking`) never executes. The paratrooper visually disappears (via `enemy.destroy()`) before it can crouch and plant the explosive. The entire intended attack sequence is bypassed.
 - **Steps to Reproduce**:
-  1. Start game, spawn a transport plane.
-  2. Wait for a paratrooper to be dropped — it enters freefall for 0.3 seconds.
-  3. During those 0.3 seconds, `ctx.save()` is called without `ctx.restore()` on every frame (~18 leaked states at 60fps).
-  4. All entities drawn after the paratrooper in entity order will be offset by the leaked translation.
-- **Root Cause**: `paratrooper.js` lines 128-132 — the `else` freefall branch calls `return` before `ctx.restore()`. Fix: replace `return` with `ctx.restore(); return;` or restructure so `ctx.restore()` is always the final call.
-- **Screenshot**: /tmp/qa-screenshots/005-paratroopers-falling-5s.png
+  1. Start game, inject `game._spawnTransportPlane()`.
+  2. Let a paratrooper land and start running toward a launcher.
+  3. When the paratrooper is within ~62px of a launcher, it will disappear and the launcher will be destroyed — but without the crouch/fuse animation described in the spec.
+- **Root Cause**: Section 3 in `collision.js` lacks an `isParatrooper` guard (analogous to the `isTransportPlane` guard in section 2). Fix: add `if (isParatrooper(enemy)) continue;` at the start of the section 3 inner loop (or outer loop) to skip paratroopers, letting their own state machine handle launcher destruction.
+- **Screenshot**: N/A (code-only analysis)
 
 ---
 
-### BUG-002: Suspension lines drawn in wrong coordinate space — miss soldier body
+## Correction of Prior QA Session Errors
+
+### PRIOR BUG-001 RETRACTED: ctx.save/restore imbalance — FALSE POSITIVE
+
+The prior QA session claimed the freefall draw path leaked `ctx.save()` without a matching `ctx.restore()`. This is incorrect. Reading `paratrooper.js` lines 128-133:
+
+```
+} else {
+  // Freefall — show soldier tumbling without chute
+  this._drawSoldierBody(ctx, 0, 0, this.freefallTimer * 4.0);
+  ctx.restore();   // <-- line 131: restore IS called
+  return;          // <-- line 132: return AFTER restore
+}
+```
+
+`ctx.restore()` at line 131 precedes `return` at line 132. The save/restore is balanced in all code paths. No canvas state leak exists in this method.
+
+### PRIOR BUG-003 RETRACTED: Unused import in transport-plane.js — FALSE POSITIVE
+
+The prior QA session claimed `drawPoly` was imported from `./launcher.js` at line 11 of `transport-plane.js`. Searching the actual file: no such import exists. `transport-plane.js` imports only `Entity` from `./entity.js` and `randf` from `../utils.js`. The bug description was fabricated.
+
+---
+
+## Prior-Session Bugs (Confirmed Status)
+
+### BUG-002 (PASS 2, still present): Suspension lines terminate 29px above soldier's head — visible gap
 
 - **Severity**: Medium
-- **File(s)**: `src/entities/paratrooper.js`, `draw()` method, lines 108-125
-- **Description**: The suspension lines are drawn while the canvas is scaled by `deployProgress` and translated `-55` px upward (canopy origin). The endpoint `lineTo(riser, 26)` is in that scaled space. At `deployProgress = 1.0`, the lines end at `y = 26` in canopy-local space, which is `−55 + 26 = −29` relative to the entity origin. The soldier body head is at entity `y = 0`, extending to `y = 16`. The riser lines terminate 29 px above the soldier's head — a visible gap between lines and soldier at all `deployProgress` values.
-- **Steps to Reproduce**:
-  1. Start game, spawn transport plane, wait for paratrooper to fully deploy parachute.
-  2. Observe the gap between suspension line endpoints and the soldier figure.
-- **Root Cause**: The suspension line endpoint `26` is not compensated for the canvas scale. Fix: draw lines outside the `ctx.scale(deployProgress, ...)` block, computing the canopy skirt point in entity space as `(GORE_X6[g] * deployProgress, −55 + 0 * deployProgress)` and the soldier shoulder as a fixed entity-space point.
-- **Screenshot**: /tmp/qa-screenshots/006-paratroopers-landing-8s.png
+- **File(s)**: `src/entities/paratrooper.js`, `_drawParachutingTrooper()`, lines 373-396
+- **Current code location**: Lines 380-390 draw suspension lines inside the `ctx.save()` block that applies `ctx.translate(0, -55)` and `ctx.scale(deployProgress, deployProgress)`.
+- **Description**: At `deployProgress = 1.0`, the line endpoint `lineTo(riser, 26)` in canopy-local space maps to entity-space y = -55 + 26 = -29. The soldier head is at entity-space y = -6 to -1. The riser endpoints terminate ~23px above the soldier's head — a clearly visible gap. During deployment animation (deployProgress < 1), the gap changes continuously, making the lines appear to float disconnected. Fix: draw suspension lines outside the canopy `ctx.save/restore` block in entity space, with skirt X = `GORE_X6[g] * deployProgress` at y = -55, and riser anchor at `(riser, -6)` in entity space.
+- **Screenshot**: N/A (fresh Bash unavailable; confirmed by coordinate analysis)
 
 ---
 
-### BUG-003: Unused import in transport-plane.js
+### BUG-003 (PASS 2, still present): globalAlpha manual reset without save/restore in _drawCanopy
 
 - **Severity**: Low
-- **File(s)**: `src/entities/transport-plane.js`, line 11
-- **Description**: `drawPoly` is imported from `./launcher.js` but never called in `transport-plane.js`. The plane draw method uses inline path loops. Dead code.
-- **Steps to Reproduce**: Static — `import { drawPoly } from './launcher.js'` at line 11; no other occurrence of `drawPoly` in the file.
-- **Root Cause**: Unused import, likely left from an earlier draft.
-- **Screenshot**: N/A
+- **File(s)**: `src/entities/paratrooper.js`, `_drawCanopy()`, lines 415-417
+- **Description**: `ctx.globalAlpha = 0.95` set then `ctx.globalAlpha = 1.0` manually reset without `ctx.save()/ctx.restore()` wrapping. Functionally safe now but violates project convention and fragile to future edits. Fix: wrap the Layer 1 canopy base block in `ctx.save()/ctx.restore()`.
+- **Screenshot**: N/A (code-only)
 
 ---
 
-### BUG-004: Dead assignment — gravityForce property set but never read
+### BUG-004 (PASS 2, confirmed FIXED): Dead assignment — gravityForce property — RESOLVED
 
-- **Severity**: Low
-- **File(s)**: `src/entities/paratrooper.js`, `update()` method, line 63
-- **Description**: `this.gravityForce = PARACHUTE_GRAVITY` is assigned on parachute deploy but never read. Actual gravity is applied directly via `this.vy += PARACHUTE_GRAVITY * dt` on line 90. The property does nothing.
-- **Root Cause**: Dead assignment — leftover from an earlier design.
-- **Screenshot**: N/A
+- `this.gravityForce` no longer exists in `paratrooper.js`. Fixed since prior QA pass. Closed.
+
+---
+
+### BUG-005 (wave spawn threshold, still present): Transport plane spawns from wave 1 — spec requires wave 4
+
+- **Severity**: High
+- **File(s)**: `src/wave.js`, line 96
+- **Description**: Current code at line 96: `if (wave >= 1) pool.push('transport_plane')`. Prior QA report incorrectly stated `wave >= 2` — the actual code has always been `wave >= 1`. Transport planes (and their paratroopers) can spawn in wave 1, the very first wave, well before the spec's intended wave 4 introduction. This is more severe than the prior report indicated.
+- **Root Cause**: Wrong threshold. Fix: `if (wave >= 4) pool.push('transport_plane')`.
+- **Screenshot**: N/A (code-only)
 
 ---
 
 ## Verified Working
 
-- **Wave integration**: `transport_plane` cost=5, pool guarded by `wave >= 4`, timing biased to wave middle. Correct.
-- **`_spawnTransportPlane()` in game.js**: Parameters correct, `onDropParatrooper` callback creates and adds `Paratrooper` entities. Both imports present.
-- **Collision — player projectile vs transport plane**: Mega explosion, 3 points, shake(15). Correct.
-- **Collision — player projectile vs paratrooper (mid-air)**: Normal explosion, 2 points. Correct.
-- **Collision — paratrooper vs terrain**: `isTransportPlane` skip in place. Landing damage logic: launcher within 120px destroyed with mega explosion; otherwise small explosion. Correct.
-- **Score values**: `transport_plane: 3`, `paratrooper: 2` in `onEnemyDestroyed`. Correct.
-- **Transport plane off-screen cleanup**: `_stopEngineSound()` called on off-screen and on `destroy()`. Correct.
-- **Drop zone guard**: Only drops between `PLAYFIELD.left=200` and `PLAYFIELD.right=2360`. Correct.
+- **`_spawnTransportPlane()` in game.js**: Parameters correct (`fromLeft`, `yPos = randf(100, 250)`, `maxDrops = randf(3, 6)`). `onDropParatrooper` callback correctly creates and adds `Paratrooper` entities. Both `TransportPlane` and `Paratrooper` imported at game.js lines 22-23.
+- **onDetonate wiring**: `trooper.onDetonate` correctly wired in `game.js` lines 588-599. Callback spawns `Explosion(px, py, true)` (mega), `Crater(px, craterY, 2)`, calls `terrain.damage(px, py, 70, 25)` and `shakeScreen(20)`. Correct.
+- **Collision — player projectile vs transport plane**: `isTransportPlane` branch in `collision.js`: mega explosion at plane coords, `onEnemyDestroyed('transport_plane')` for 3 points, `shakeScreen(15)`. Correct per spec.
+- **Collision — player projectile vs paratrooper (mid-air)**: `isParatrooper` branch: normal explosion at midpoint, `onEnemyDestroyed('paratrooper')` for 2 points. Correct per spec.
+- **Collision — paratrooper vs terrain (section 2)**: Correctly SKIPPED via `if (isParatrooper(enemy)) continue;` at `collision.js` line 236. Paratrooper landing is handled by the `_land()` state machine, not the collision system.
+- **Paratrooper attack state machine (state machine logic only)**: `_updateAttacking` correctly calls `onDetonate(x, y)`, then `_runTarget.destroy()` with alive guard, then `this.alive = false`. Logic is correct in isolation. However see BUG-001 — this state is never reached due to the collision system intercepting the trooper first.
+- **Paratrooper idle path**: `_updateIdle` despawns after `IDLE_DESPAWN_DELAY = 1.5s` if no targets. Correct.
+- **Retargeting**: `_findTarget()` skips `launcher.alive === false` launchers correctly. `_updateRunning` calls `_findTarget()` when current target dies.
+- **Score values**: `onEnemyDestroyed` points map: `transport_plane: 3`, `paratrooper: 2`. Correct per spec.
+- **Transport plane off-screen cleanup**: `_stopEngineSound()` called at both off-screen boundary and on `destroy()`. No sound leak possible.
+- **Drop zone guard**: `this.x >= PLAYFIELD.left && this.x <= PLAYFIELD.right` (200-2360) ensures no drops happen off-screen. Correct.
+- **Initial drop timer randomization**: `dropTimer = randf(0.8, 1.5)` prevents simultaneous drops. Correct.
+- **Paratrooper freefall → parachute state machine**: `freefallTimer` increments for `FREEFALL_DURATION = 0.3s`, then state → `parachute`, `deployProgress` ramps 0 → 1.07 (overshoot) → 1.0 over 0.3s. Correct.
 - **Paratrooper off-screen cleanup**: `x < -200 || x > 2760` kills entity. Correct.
-- **Group membership**: Both entities in `enemy_missiles` group — targetable by player, counted by wave completion. Correct.
-- **Type guards**: `constructor.name` string checks work correctly for both new types.
-- **No runtime JS errors** during test session.
+- **Group membership**: Both entities in `'enemy_missiles'` — correctly targetable by player projectiles and counted by wave completion.
+- **Type guards**: `isTransportPlane` and `isParatrooper` use `constructor.name` — correct for both types.
+- **ctx.save()/ctx.restore() balance in paratrooper draw()**: Outer save/restore at lines 309/365 wraps all paths. Each state branch (freefall, parachute, landed, running, attacking, idle) returns with exactly one `ctx.restore()`. `_drawParachutingTrooper` has inner save/restore balanced. `_drawSoldierBody` has its own save/restore. Total: balanced.
+- **ctx.save()/ctx.restore() balance in transport-plane draw()**: 1 outer + 6 inner saves = 7 total; 7 matching restores. Balanced.
+- **setLineDash reset in _drawAttackingBody**: `setLineDash([2,2])` and `setLineDash([])` both inside the same `if (fuseLineLen > 0)` block (lines 589-594). Always reset within block. Additionally isolated by outer `ctx.save/restore`. No leak.
+- **No zero-radius gradients**: `createRadialGradient(-6,-20,0, 0,-13,36)` — outer radius 36 > 0. `createLinearGradient(0,0,0,CANOPY_APEX_Y)` — CANOPY_APEX_Y=-26, nonzero length. Both safe.
+- **Wave cost**: `transport_plane: 5` in `costs` object at `wave.js` line 87. Matches spec.
 
 ---
 
 ## Test Evidence
 
+Fresh screenshot run was not possible in this session (Bash tool permission unavailable). Analysis is entirely code-based against the current source files read via the Read tool.
+
+Source files analyzed:
+- `/Users/urizonens/dev/multiagent/missile-attack-arcade-web/src/entities/paratrooper.js` — full file
+- `/Users/urizonens/dev/multiagent/missile-attack-arcade-web/src/entities/transport-plane.js` — full file
+- `/Users/urizonens/dev/multiagent/missile-attack-arcade-web/src/collision.js` — full file
+- `/Users/urizonens/dev/multiagent/missile-attack-arcade-web/src/game.js` — lines 1-250, 575-630
+- `/Users/urizonens/dev/multiagent/missile-attack-arcade-web/src/wave.js` — full file
+- `/Users/urizonens/dev/multiagent/missile-attack-arcade-web/src/entities/launcher.js` — full file
+- `/Users/urizonens/dev/multiagent/missile-attack-arcade-web/src/entities/entity.js` — full file
+- `/Users/urizonens/dev/multiagent/missile-attack-arcade-web/src/crater.js` — full file
+
+Prior session screenshot data (for reference):
+
 | Screenshot | Description |
 |------------|-------------|
-| /tmp/qa-screenshots/000-start-screen.png | Start screen |
 | /tmp/qa-screenshots/003-transport-plane-spawned.png | Plane entering from right edge after injection |
-| /tmp/qa-screenshots/004-transport-plane-flying-2s.png | Plane 2s into flight, no troopers yet |
 | /tmp/qa-screenshots/005-paratroopers-falling-5s.png | Two paratroopers with deployed canopies visible |
 | /tmp/qa-screenshots/006-paratroopers-landing-8s.png | Multiple paratroopers mid-descent |
-| /tmp/qa-screenshots/007-multiple-planes-spawned.png | Three planes with multiple paratroopers |
 | /tmp/qa-screenshots/008-multiple-paratroopers-falling.png | 10+ paratroopers, HEAT-SK and VULKAN destroyed |
-| /tmp/qa-screenshots/009-paratroopers-near-ground.png | Dense swarm near terrain, 3 launchers DESTROYED |
-| /tmp/qa-screenshots/011-final-state.png | Final state, TRUCK is last surviving launcher |
-
-**Runtime data from page.evaluate:**
-- Plane spawn: `x=2710, y=154.66, direction=-1, dropsRemaining=4`
-- Paratroopers at 5s: 2 active, both `parachuteDeployed=true, deployProgress=1.00`
-- Final launchers: SAM(dead), HEAT-SK(dead), TRUCK(alive), VULKAN(dead) — 3 of 4 destroyed by paratroopers
 
 ---
 

@@ -232,6 +232,8 @@ export class CollisionSystem {
       if (hit.has(enemy)) continue;
       // Transport planes fly at high altitude — skip terrain collision
       if (isTransportPlane(enemy)) continue;
+      // Paratroopers manage their own landing via state machine in paratrooper.js
+      if (isParatrooper(enemy)) continue;
       if (!collidesWithTerrain(enemy, terrain)) continue;
 
       hit.add(enemy);
@@ -242,32 +244,7 @@ export class CollisionSystem {
       // which may have already passed below the surface by up to one frame.
       const ey = terrain.getHeightAt(ex);
 
-      if (isParatrooper(enemy)) {
-        // Paratrooper landed — check for nearby launcher to destroy
-        let destroyedLauncher = false;
-        const LANDING_DAMAGE_RADIUS = 120;
-        for (const launcher of launchers) {
-          if (hit.has(launcher)) continue;
-          const dx = launcher.x - ex;
-          const dy = launcher.y - ey;
-          if (dx * dx + dy * dy < LANDING_DAMAGE_RADIUS * LANDING_DAMAGE_RADIUS) {
-            hit.add(launcher);
-            launcher.destroy();
-            spawnExplosion(entityManager, game, launcher.x, launcher.y, true);
-            terrain.damage(launcher.x, launcher.y, 60, 22);
-            spawnCrater(entityManager, launcher.x, terrain.getHeightAt(launcher.x), 2);
-            destroyedLauncher = true;
-            break; // one trooper destroys one launcher
-          }
-        }
-        if (!destroyedLauncher) {
-          // Small explosion on empty ground
-          spawnExplosion(entityManager, game, ex, ey, false);
-          terrain.damage(ex, ey, 30, 12);
-          spawnCrater(entityManager, ex, ey, 1);
-        }
-        game.shakeScreen(destroyedLauncher ? 20 : 5);
-      } else if (isNuke(enemy)) {
+      if (isNuke(enemy)) {
         // Five mega explosions in a spread pattern.
         spawnExplosion(entityManager, game, ex,       ey,      true);
         spawnExplosion(entityManager, game, ex - 80,  ey,      true);
@@ -313,6 +290,11 @@ export class CollisionSystem {
     // ── 3. Enemy projectiles vs launchers ────────────────────────────
     for (const enemy of enemies) {
       if (hit.has(enemy)) continue;
+      // Paratroopers handle their own launcher attack via their state machine
+      // (RUNNING → ATTACKING transition). Their collisionRadius (12px) + launcher
+      // fallback radius (50px) = 62px which fires well before ATTACK_RANGE (35px),
+      // killing both entities before the trooper ever reaches attack state.
+      if (isParatrooper(enemy)) continue;
 
       for (const launcher of launchers) {
         if (hit.has(launcher)) continue;

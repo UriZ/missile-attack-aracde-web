@@ -21,6 +21,9 @@ import { SuicideDrone } from './entities/suicide-drone.js';
 import { Nuke } from './entities/nuke.js';
 import { TransportPlane } from './entities/transport-plane.js';
 import { Paratrooper } from './entities/paratrooper.js';
+import { Explosion } from './explosion.js';
+import { Crater } from './crater.js';
+import { DayNightCycle } from './day-night.js';
 import { rgba, lerp, randf, dist } from './utils.js';
 
 // Launcher spawn positions (from main.gd / SCENE_DATA)
@@ -62,6 +65,9 @@ export class Game {
     /** @type {import('./terrain.js').Terrain|null} */
     this.terrain = null;
 
+    /** @type {DayNightCycle} */
+    this.dayNight = new DayNightCycle();
+
     /** @type {import('./entities/entity.js').Entity|null} */
     this.lockedTarget = null;
     this._targetAcquiredCooldown = 0;
@@ -95,6 +101,8 @@ export class Game {
       // Stop terrain recovery once the new wave begins — craters should stick
       // during active combat.
       if (this.terrain) this.terrain.recovering = false;
+      // Advance day/night cycle to target tod for this wave
+      this.dayNight.setWave(wave);
     };
     this.waves.onWaveComplete = (wave) => {
       this.ui.showWaveBanner(`WAVE ${wave} CLEAR`, rgba(0.2, 0.9, 0.3));
@@ -184,6 +192,16 @@ export class Game {
 
   /** @param {number} dt */
   _updatePlaying(dt) {
+    // Update day/night cycle
+    const waveDuration = this.waves._waveDuration || 20;
+    const waveProgress = waveDuration > 0 ? Math.min(this.waves.waveTimer / waveDuration, 1) : 0;
+    this.dayNight.update(dt, waveProgress);
+
+    // Propagate day/night colors to terrain when tod changes significantly
+    if (this.terrain && this.dayNight.consumeTerrainDirty()) {
+      this.terrain.setDayNight(this.dayNight);
+    }
+
     // Feed mouse position to all launchers
     for (const launcher of this.launchers) {
       if (launcher.alive) {
@@ -246,9 +264,20 @@ export class Game {
 
     r.beginFrame();
 
-    // Sky
-    ctx.fillStyle = rgba(0.05, 0.05, 0.12);
-    ctx.fillRect(0, 0, Renderer.LOGICAL_W, Renderer.LOGICAL_H);
+    if (this.state === 'playing' || this.state === 'gameover') {
+      // Dynamic sky gradient from day/night cycle
+      const sky = this.dayNight.getSkyColors();
+      const skyGrad = ctx.createLinearGradient(0, 0, 0, Renderer.LOGICAL_H);
+      skyGrad.addColorStop(0,   rgba(...sky.top));
+      skyGrad.addColorStop(0.5, rgba(...sky.mid));
+      skyGrad.addColorStop(1,   rgba(...sky.bottom));
+      ctx.fillStyle = skyGrad;
+      ctx.fillRect(0, 0, Renderer.LOGICAL_W, Renderer.LOGICAL_H);
+    } else {
+      // Start screen: flat dark fill (overwritten below by start-screen gradient)
+      ctx.fillStyle = rgba(0.05, 0.05, 0.12);
+      ctx.fillRect(0, 0, Renderer.LOGICAL_W, Renderer.LOGICAL_H);
+    }
 
     if (this.state === 'start') {
       r.beginUI();
@@ -332,8 +361,19 @@ export class Game {
       ctx.restore();
 
     } else if (this.state === 'playing' || this.state === 'gameover') {
+      // Atmospheric layers — drawn before game world entities (no shake applied yet)
+      this.dayNight.drawStars(ctx);
+      this.dayNight.drawCelestialBody(ctx);
+      this.dayNight.drawClouds(ctx, this._lastDt);
+
       // Game world (with shake)
       this.entities.draw(ctx);
+
+      // Weather overlay — drawn after entities, before UI (no shake for weather)
+      if (this.state === 'playing') {
+        r.beginUI();
+        this.dayNight.drawWeather(ctx, this._lastDt);
+      }
 
       // UI layer (no shake)
       r.beginUI();
@@ -580,6 +620,21 @@ export class Game {
     const plane = new TransportPlane(fromLeft, yPos, maxDrops);
     plane.onDropParatrooper = (x, y) => {
       const trooper = new Paratrooper(x, y);
+      // Inject game-world references so the trooper can navigate and attack
+      trooper.terrain   = this.terrain;
+      trooper._launchers = this.launchers;
+      trooper.onDetonate = (px, py) => {
+        // Spawn explosion at detonation point
+        this.entities.add(new Explosion(px, py, true));
+        this.audio.playExplosion(px, true);
+        // Crater at detonation point
+        const craterY = this.terrain ? this.terrain.getHeightAt(px) : py;
+        this.entities.add(new Crater(px, craterY, 2));
+        if (this.terrain) {
+          this.terrain.damage(px, py, 70, 25);
+        }
+        this.shakeScreen(20);
+      };
       this.entities.add(trooper);
     };
     this.entities.add(plane);

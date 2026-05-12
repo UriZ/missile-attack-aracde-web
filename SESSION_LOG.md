@@ -641,3 +641,217 @@ Commit `a5a6ad7` pushed to `main`. 13 files changed, +1612 / -519 lines.
 - **Agent type**: `senior-game-developer`
 - **Task**: Dramatic lock-on crosshair effects + "pickle is hot" radio voice audio + trigger in game.js
 - **GitHub issues**: #12
+
+*(Session ended before agent results were captured)*
+
+---
+
+## Session: 2026-05-12
+
+### Phase 1: QA Skill Verification
+
+**[Team Lead → visual-qa "qa-skill-test"]**
+- **Agent type**: `visual-qa`
+- **Task**: Verify the `/qa-screenshot` skill integration works
+- **Duration**: 167s, 3 tool uses, 13k tokens
+
+**[qa-skill-test → Team Lead] — COMPLETED**
+- **Agent TLDR**: Verified the `/qa-screenshot` skill integration by running it with `--no-start` and reading the output screenshot. Found 0 bugs. Skill executes without errors, screenshot saved to `/tmp/qa-screenshots/001_start_screen.png`, start screen renders correctly with arcade cabinet, title, and click-to-start prompt.
+- **Improvement Insights applied**:
+  - **visual-qa.md**: Added note about two-step skill flow (Skill tool → Bash command)
+  - **qa-screenshot.js**: Added summary line to stdout on completion
+  - **CLAUDE.md**: Skipped — better to document in skill itself
+
+---
+
+### Phase 2: Paratrooper QA (#24)
+
+**[Team Lead → visual-qa "qa-paratroopers"]**
+- **Agent type**: `visual-qa`
+- **Task**: QA paratrooper feature — transport plane, soldier drops, parachute, landing
+- **GitHub issues**: #24
+- **Duration**: 245s, 24 tool uses, 58k tokens
+
+**[qa-paratroopers → Team Lead] — COMPLETED**
+- **Agent TLDR**: Verified issue #24 by reading all source files — transport-plane.js, paratrooper.js, collision.js, game.js, wave.js, entity.js, entity-manager.js — and performing line-by-line code analysis. Could not run `/qa-screenshot` due to Bash permission unavailable. Relied on full source code review. Retracted 2 false positives from prior QA session. Found 3 real bugs: 0 critical, 1 high (wave threshold wrong), 1 medium (suspension line gap), 1 low (globalAlpha without save/restore).
+- **Improvement Insights applied**:
+  - **visual-qa.md**: Added stricter rules on save/restore claims (must list exact line numbers), globalAlpha wrapping requirement, and import verification before claiming unused
+
+---
+
+### Phase 3: QA for #23 and #22 (parallel)
+
+**[Team Lead → visual-qa "qa-issue-23"]**
+- **Agent type**: `visual-qa`
+- **Task**: Verify heat-seeker lock circle size fix
+- **GitHub issues**: #23
+- **Duration**: 269s, 32 tool uses, 70k tokens
+
+**[qa-issue-23 → Team Lead] — COMPLETED**
+- **Agent TLDR**: Re-verified heat-seeker lock circle size fix by running two fresh screenshot sessions with heat-seeker launcher selected and cross-referencing source code. Found 0 bugs. HEAT_LOCK_RADIUS = 90 (was 50) and CROSSHAIR_RADIUS = 90 (was 50). 90px logical radius renders as ~45 screen pixels at 1280x720 — clearly visible. Lock circle and detection zone match.
+- **Improvement Insights applied**:
+  - **qa-screenshot SKILL.md**: Added launcher numbering docs (1=SAM, 2=Heat-Seeker, 3=Truck, 4=Vulkan)
+- **Result**: Issue #23 closed
+
+**[Team Lead → visual-qa "qa-issue-22"]**
+- **Agent type**: `visual-qa`
+- **Task**: Verify wave number duplication bug fix
+- **GitHub issues**: #22
+- **Duration**: 306s, 35 tool uses, 73k tokens
+
+**[qa-issue-22 → Team Lead] — COMPLETED**
+- **Agent TLDR**: Verified wave banner duplication fix by running 45-second QA session, reading screenshots showing wave transition states, and full code review. Found 0 bugs. `_bannerPhase === 'idle'` guard at ui.js:422 correctly suppresses score panel wave text during all banner animation phases. Timing safe: 2.6s banner vs 3.0s inter-wave timer leaves 0.40s margin.
+- **Improvement Insights applied**:
+  - **CLAUDE.md**: Added render order note (terrain → entities → drawHUD → drawWaveBanner)
+- **Result**: Issue #22 closed
+
+---
+
+### Phase 4: Issue Triage
+
+Closed by user approval: #12, #14, #17, #20, #22, #23
+
+User decisions:
+- Transport planes spawn from wave 1 (not wave 4) — `wave.js` updated
+- Nukes spawn from wave 3 (not wave 5) — `wave.js` updated
+- Paratroopers should NOT explode on landing — should become ground soldiers that run and attack assets
+
+---
+
+### Phase 5: Paratrooper Ground Soldier Redesign (#24)
+
+**[Team Lead → game-architect "architect-paratroopers"]**
+- **Agent type**: `game-architect`
+- **Task**: Design ground soldier AI — state machine, targeting, attack behavior
+- **GitHub issues**: #24
+- **Duration**: 159s, 14 tool uses, 36k tokens
+
+**[architect-paratroopers → Team Lead] — COMPLETED**
+- **Agent TLDR**: Designed ground soldier rework by reading paratrooper.js, collision.js, game.js, terrain.js, sam-launcher.js, entity-manager.js, transport-plane.js. Key decisions: (1) Extend Paratrooper class with new states rather than separate GroundSoldier class. (2) Soldier detects own terrain landing in update() rather than collision.js. (3) collision.js gets one-line `continue` guard for paratroopers. (4) No HP — one-hit kill. (5) Idle state for no-targets uses despawn timer, no explosion. State machine: FREEFALL → PARACHUTE → LANDED → RUNNING → ATTACKING → dead (or IDLE → dead if no targets).
+- **Improvement Insights applied**:
+  - **CLAUDE.md**: Added entity lifecycle conventions (dead launchers in array, terrain ref at spawn, re-query getHeightAt every frame)
+
+**[Team Lead → senior-game-developer "dev-paratroopers"]**
+- **Agent type**: `senior-game-developer`
+- **Task**: Implement ground soldier per architect spec
+- **GitHub issues**: #24
+- **Duration**: 241s, 27 tool uses, 60k tokens
+
+**[dev-paratroopers → Team Lead] — COMPLETED**
+- **Agent TLDR**: Implemented ground soldier rework by replacing single-phase explode-on-landing with 6-state machine (FREEFALL → PARACHUTE → LANDED → RUNNING → ATTACKING → IDLE). Changed 3 files: paratrooper.js (full rewrite — state machine, ground constants, _land(), _findTarget(), running/attacking draw methods), collision.js (added isParatrooper continue guard, removed dead landing block), game.js (added Explosion/Crater imports, injected terrain/_launchers/onDetonate into dropped troopers). Used horizontal-distance targeting, onDetonate fires at soldier position, kept parachuteDeployed boolean for draw compatibility.
+- **Improvement Insights applied**:
+  - **CLAUDE.md**: Added note that Explosion/Crater are in src/ not src/entities/, and that game.launchers is a stable live reference
+
+---
+
+### Retrospective Process Established
+
+User flagged that two mandatory workflows were broken:
+1. **Agent TLDRs** were being paraphrased instead of captured verbatim in session log
+2. **Improvement Insights** were generated by agents but never acted on by team lead
+
+Fixes applied:
+- Added "Team Lead Retrospective (MANDATORY)" section to CLAUDE.md with 6-step process
+- Saved retrospective requirement to memory for future sessions
+- All agent completions in this session now follow the retrospective flow
+
+### Task List Snapshot
+
+| Issue | Title | Status | Label |
+|-------|-------|--------|-------|
+| #24 | Paratroopers — ground soldier AI | Developer implementing | developer |
+| #21 | Nuke visual redesign | Needs QA | qa |
+| #19 | UI Overhaul | Awaiting user approval | qa |
+| #16 | Dynamic scenery/daytime | Needs architect | architect |
+
+---
+
+### Phase 5b: Lock-On Crosshair Redesign
+
+**[Team Lead → ui-designer "designer-lock-crosshair"]**
+- **Agent type**: `ui-designer`
+- **Task**: Design alternative heat-seeker lock-on crosshair
+- **Duration**: 133s, 4 tool uses, 38k tokens
+
+**[designer-lock-crosshair → Team Lead] — COMPLETED**
+- **Agent TLDR**: Read ui.js (1303 lines), heat-seeking-launcher.js, and game.js lock logic. Designed 3 concepts: (A) Fighter Jet STT Lock, (B) Missile Lock Diamond Reticle, (C) Converging Chevrons. Selected C. Key decisions: (1) Move primary lock indicator from cursor to target — current 106px circle at mouse misdirects player's eye. (2) Replace 4Hz red/yellow/white cycle with single amber #FFAA00 palette. (3) Acquisition flash/sparks emit from target not cursor. Full spec with exact sizes, colors, animation state machine, canvas implementation notes.
+- **Improvement Insights**: Designer suggested adding screenshot requirement to UI design issues — valid workflow improvement, noted.
+- **Status**: Awaiting user approval before developer implementation
+
+---
+
+### Phase 7: Ground Soldier QA (#24)
+
+**[Team Lead → visual-qa "qa-ground-soldier"]**
+- **Agent type**: `visual-qa`
+- **Task**: Verify ground soldier feature
+- **GitHub issues**: #24
+- **Duration**: 327s, 37 tool uses, 83k tokens
+
+**[qa-ground-soldier → Team Lead] — COMPLETED**
+- **Agent TLDR**: Found 4 bugs (0 critical, 2 high, 1 medium, 1 low). BUG-001 (HIGH): collision.js section 3 has no isParatrooper guard — grounded soldiers (r=12) + launchers (r=50) = 62px collision fires before ATTACK_RANGE=35px, skipping entire attack animation/fuse/onDetonate. BUG-005 (HIGH): wave threshold is wave>=1, user already approved this — NOT A BUG. BUG-002 (MEDIUM): suspension lines 23px gap. BUG-003 (LOW): globalAlpha without save/restore.
+- **Improvement Insights**: QA suggested adding collision section audit checklist for new enemy types — valid, added to visual-qa.md
+
+**[Team Lead → game-developer "dev-paratrooper-fix"]**
+- **Agent type**: `game-developer`
+- **Task**: Fix 3 paratrooper bugs (collision guard, suspension lines, globalAlpha)
+- **GitHub issues**: #24
+- **Duration**: 90s, 11 tool uses, 34k tokens
+
+**[dev-paratrooper-fix → Team Lead] — COMPLETED**
+- **Agent TLDR**: Fixed 3 bugs in collision.js and paratrooper.js. (1) Added `if (isParatrooper(enemy)) continue;` in collision.js section 3 — soldiers were auto-killed at 62px before reaching ATTACK_RANGE 35px. (2) Moved suspension lines out of canopy save/restore block into entity space with inverse transform math including rotate. (3) Wrapped globalAlpha in save/restore.
+- **Improvement Insights**: Developer noted spec for BUG-002 didn't account for rotate() in the transform chain — valid, noted for future specs
+
+---
+
+### Phase 9: Biomes Architect (#26)
+
+**[Team Lead → game-architect "architect-biomes"]**
+- **Agent type**: `game-architect`
+- **Task**: Design environment biomes system
+- **GitHub issues**: #26
+- **Duration**: 215s, 9 tool uses, 63k tokens
+
+**[architect-biomes → Team Lead] — COMPLETED**
+- **Agent TLDR**: Designed 5 biomes (Snow, Desert, Riverside, Sunrise, Stormy). Biome picked once per game. BiomeDayNightProxy wraps DayNightCycle with multiplicative color tints. Terrain decorations use ctx.filter on offscreen blit (no per-decoration changes). Water drawn in game.js before terrain. Particle systems: snow (220 particles), heat shimmer (gradient bands), heavy rain (400 particles), lightning (state machine + bolt geometry), lens flare (sun-to-center orbs). New file src/biome.js, minor changes to day-night.js (getSunPosition), terrain.js (height modifiers, water), game.js (wire biome), audio.js (playThunder).
+
+---
+
+### Phase 8: Day/Night + Crosshair Development (parallel)
+
+**[Team Lead → senior-game-developer "dev-daynight"]**
+- **Agent type**: `senior-game-developer`
+- **Task**: Implement day/night cycle system
+- **GitHub issues**: #16
+- **Duration**: 280s, 32 tool uses — **HIT RATE LIMIT**
+- **Result**: Agent completed most work before limit. `src/day-night.js` (683 lines) created, wired into game.js (sky gradient, stars, sun/moon, clouds, weather). Terrain integration done. Smoke test passes.
+
+**[Team Lead → senior-game-developer "dev-crosshair"]**
+- **Agent type**: `senior-game-developer`
+- **Task**: Implement converging chevrons lock-on crosshair
+- **GitHub issues**: #25
+- **Duration**: 57s, 4 tool uses — **HIT RATE LIMIT EARLY**
+- **Result**: Only state variables and particle origin changes landed. `_drawLockedCrosshair` NOT rewritten. Respawned.
+
+**[Team Lead → senior-game-developer "dev-crosshair-2"]**
+- **Agent type**: `senior-game-developer`
+- **Task**: Rewrite _drawLockedCrosshair with converging chevrons design
+- **GitHub issues**: #25
+- **Duration**: 179s, 17 tool uses, 54k tokens
+
+**[dev-crosshair-2 → Team Lead] — COMPLETED**
+- **Agent TLDR**: Full rewrite of `_drawLockedCrosshair` in ui.js (lines 979-1178). Removed: 106px lock circle, 4Hz color cycling, 8-pointed diamond, counter-rotating circle, dashed line. Added: glow halo at target, 3-ring acquisition flash (staggered delays, easeOutCubic), 4 rotating arc segments converging from r=80→40 with chevrons, fixed inner crosshair at target, "LOCKED" badge with dark pill, spark particles from target position, minimal amber cursor with "FIRE" label. Added easeOutCubic helper. Removed unused HEAT_LOCK_RADIUS and TARGET_RING_RADIUS constants.
+
+---
+
+### Phase 6: Dynamic Scenery Architect (#16)
+
+**[Team Lead → game-architect "architect-scenery"]**
+- **Agent type**: `game-architect`
+- **Task**: Design dynamic day/night cycle + scenery system
+- **GitHub issues**: #16
+- **Duration**: 207s, 8 tool uses, 75k tokens
+
+**[architect-scenery → Team Lead] — COMPLETED**
+- **Agent TLDR**: Designed complete day/night cycle system. New `DayNightCycle` class in `src/day-night.js` as single source of truth. Wave-driven tod (8 waves = 1 full cycle). 8 color keyframes with interpolation for sky, ground, grass, mountains, haze. Stars (180 twinkling), sun/moon arcs, 2-layer scrolling clouds, optional weather (rain/fog at 20% chance from wave 3+). Terrain offscreen redraws guarded by delta check. Mountain closures need refactor to query dynamic colors. Building windows adapt (mostly lit at night, few lit at day).
+- **Improvement Insights**: Architect suggested documenting terrain's pre-bake pattern for closures — added to game-architect.md rather than CLAUDE.md per user preference for minimal CLAUDE.md.

@@ -21,6 +21,9 @@ export class WaveSystem {
     this.onWaveStart = null;
     /** @type {((wave: number) => void) | null} */
     this.onWaveComplete = null;
+
+    /** Duration (seconds) of the most recently generated wave. */
+    this._waveDuration = 10;
   }
 
   /** Begin with 2.5s grace period before wave 1. */
@@ -93,8 +96,8 @@ export class WaveSystem {
     if (wave >= 2) pool.push('super_missile');
     if (wave >= 2) pool.push('drone');
     if (wave >= 3) pool.push('suicide_drone');
-    if (wave >= 2) pool.push('transport_plane');
-    if (wave >= 1) pool.push('nuke'); // TODO: revert to wave >= 5 after testing
+    if (wave >= 1) pool.push('transport_plane');
+    if (wave >= 3) pool.push('nuke');
 
     // ── Spend the budget randomly ──
     let remaining = budget;
@@ -106,8 +109,8 @@ export class WaveSystem {
       remaining -= costs.missile;
     }
 
-    // Guarantee at least 1 nuke (TODO: revert to wave >= 5 after testing)
-    if (wave >= 1) {
+    // Guarantee at least 1 nuke from wave 3+
+    if (wave >= 3) {
       events.push({ time: 0, type: 'nuke' });
       remaining -= costs.nuke;
       if (wave >= 8 && rng() < 0.5) {
@@ -138,6 +141,7 @@ export class WaveSystem {
     // ── Assign random timing ──
     // Wave duration scales with enemy count but has bounds
     const waveDuration = Math.max(10, Math.min(events.length * 1.5, 40));
+    this._waveDuration = waveDuration;
 
     for (const event of events) {
       event.time = rng() * waveDuration;

@@ -115,12 +115,8 @@ Legend: ~~Strikethrough~~ = Done | **Bold** = In Progress/QA | Normal = Planned
 
 ---
 
-### 17. Fix QA Agent
-**Status:** Planned | **GitHub:** None
-
-- QA agent should have a reusable Puppeteer screenshot skill instead of writing a new script each time
-- Workflow improvement, not a game feature
-
+### 17 hunter drone
+- have a weapon that sends out a hunter drone, that hunts for targets and kills them
 ---
 
 ## Open Bugs

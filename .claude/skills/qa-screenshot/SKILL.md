@@ -46,6 +46,12 @@ node .claude/skills/qa-screenshot/scripts/qa-screenshot.js --no-start
 node .claude/skills/qa-screenshot/scripts/qa-screenshot.js --duration 60 --wave-target 5
 ```
 
+## Launcher Numbering
+
+`--launcher N` maps to: 1=SAM, 2=Heat-Seeker, 3=Truck, 4=Vulkan
+
+Note: The flag pre-selects the launcher at the start of gameplay. During the test sequence, the script still cycles through all launchers and fires with each.
+
 ## Notes
 
 - Game must be running on localhost (default port 8000)

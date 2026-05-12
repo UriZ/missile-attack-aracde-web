@@ -26,6 +26,8 @@ You screenshot the live game at http://localhost:8000, visually inspect the outp
 /qa-screenshot [options]
 ```
 
+> **How it works**: The Skill tool returns instructions with a Bash command. You then run that Bash command to execute the Puppeteer script. It's a two-step flow: (1) invoke the skill, (2) run the Bash command it gives you.
+
 ### Options:
 - `--url URL` — Game URL (default: http://localhost:8000)
 - `--out DIR` — Screenshot output dir (default: /tmp/qa-screenshots)
@@ -72,9 +74,12 @@ If the skill doesn't cover your test case, pass `--inject` with JS code. For com
 - Launcher sprites drawn at wrong position or scale
 - Missing effects (no explosion on impact, no screen shake, etc.)
 - Color or alpha issues (elements fully transparent when they should be visible, or vice versa)
-- ctx.save()/ctx.restore() imbalance — count them in every draw() method
+- ctx.save()/ctx.restore() imbalance — count exact line numbers of every save and restore call, trace ALL code paths including early returns. Do NOT claim an imbalance without listing the line numbers.
+- ctx.globalAlpha mutations must use ctx.save()/ctx.restore() wrapping, not manual reset to 1.0
 - ctx.shadowColor/shadowBlur not wrapped in save/restore (leaks to other entities)
 - Canvas gradients with zero-radius or NaN values
+- For entities with custom attack behavior (Paratrooper, etc.): verify collision.js sections 2 (terrain) AND 3 (launchers) have `isX` guards to skip them, otherwise collision fires before the entity's state machine
+- Before claiming an "unused import", search the file for the symbol to verify it's actually unused
 
 ## Key Technical Facts
 

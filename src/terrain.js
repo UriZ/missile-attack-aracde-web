@@ -75,8 +75,20 @@ export class Terrain extends Entity {
     /** @type {{canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D} | null} */
     this._offscreen = null;
 
+    /** @type {import('./day-night.js').DayNightCycle | null} */
+    this._dayNight = null;
+
     this._generateHeights();
     this.spawnDecorations();
+  }
+
+  /**
+   * Attach (or detach) the day/night cycle. Setting it forces a redraw.
+   * @param {import('./day-night.js').DayNightCycle | null} dayNight
+   */
+  setDayNight(dayNight) {
+    this._dayNight = dayNight;
+    this.dirty = true;
   }
 
   // ── Height generation ──────────────────────────────────────
@@ -328,10 +340,16 @@ export class Terrain extends Entity {
 
   _drawGround(ctx) {
     const n = this.heights.length;
-    // Ground gradient: #453828 to #2A2018 top-to-bottom
     const groundGrad = ctx.createLinearGradient(0, 0, 0, TERRAIN_DEPTH);
-    groundGrad.addColorStop(0, '#453828');
-    groundGrad.addColorStop(1, '#2A2018');
+    if (this._dayNight) {
+      const gc = this._dayNight.getGroundColors();
+      groundGrad.addColorStop(0, rgba(...gc.top));
+      groundGrad.addColorStop(1, rgba(...gc.bottom));
+    } else {
+      // Fallback: Godot hardcoded colors
+      groundGrad.addColorStop(0, '#453828');
+      groundGrad.addColorStop(1, '#2A2018');
+    }
     ctx.fillStyle = groundGrad;
     ctx.beginPath();
     ctx.moveTo(0, TERRAIN_DEPTH);
@@ -345,10 +363,16 @@ export class Terrain extends Entity {
 
   _drawGrass(ctx) {
     const n = this.heights.length;
-    // Grass gradient: #4A8A2E to #2A5018 top-to-bottom
     const grassGrad = ctx.createLinearGradient(0, -GRASS_DEPTH, 0, GRASS_DEPTH);
-    grassGrad.addColorStop(0, '#4A8A2E');
-    grassGrad.addColorStop(1, '#2A5018');
+    if (this._dayNight) {
+      const gc = this._dayNight.getGrassColors();
+      grassGrad.addColorStop(0, rgba(...gc.top));
+      grassGrad.addColorStop(1, rgba(...gc.bottom));
+    } else {
+      // Fallback: Godot hardcoded colors
+      grassGrad.addColorStop(0, '#4A8A2E');
+      grassGrad.addColorStop(1, '#2A5018');
+    }
     ctx.fillStyle = grassGrad;
     ctx.beginPath();
     // Top edge left-to-right
@@ -379,9 +403,16 @@ export class Terrain extends Entity {
     // Atmospheric haze strip at horizon
     const hazeY = -60; // relative offset above terrain surface
     const hazeGrad = ctx.createLinearGradient(0, hazeY - 20, 0, hazeY + 20);
-    hazeGrad.addColorStop(0, 'rgba(80,100,140,0)');
-    hazeGrad.addColorStop(0.5, 'rgba(80,100,140,0.12)');
-    hazeGrad.addColorStop(1, 'rgba(80,100,140,0)');
+    let hazeR = 80, hazeG = 100, hazeB = 140;
+    if (this._dayNight) {
+      const hc = this._dayNight.getHazeColor();
+      hazeR = (hc[0] * 255) | 0;
+      hazeG = (hc[1] * 255) | 0;
+      hazeB = (hc[2] * 255) | 0;
+    }
+    hazeGrad.addColorStop(0, `rgba(${hazeR},${hazeG},${hazeB},0)`);
+    hazeGrad.addColorStop(0.5, `rgba(${hazeR},${hazeG},${hazeB},0.12)`);
+    hazeGrad.addColorStop(1, `rgba(${hazeR},${hazeG},${hazeB},0)`);
     ctx.fillStyle = hazeGrad;
     ctx.fillRect(0, hazeY - 20, TERRAIN_WIDTH, 40);
   }
@@ -389,24 +420,44 @@ export class Terrain extends Entity {
   // ── Background Mountains ──────────────────────────────────
 
   _addBackgroundMountains() {
-    // Layer 1: far distant — #161C28
-    this._addMountainLayer(0.086, 0.110, 0.157, 0.88, -280, 160, 5, 0.6, true);
-    // Layer 2: mid-distance — #1C2430
-    this._addMountainLayer(0.110, 0.141, 0.188, 0.85, -180, 120, 7, 0.8, false);
-    // Layer 3: nearby hills — #222C20
-    this._addMountainLayer(0.133, 0.173, 0.125, 0.80, -100, 80, 10, 1.0, false);
+    // Layer 1: far distant — #161C28 (layerIndex 0)
+    this._addMountainLayer(0, 0.086, 0.110, 0.157, 0.88, -280, 160, 5, 0.6, true);
+    // Layer 2: mid-distance — #1C2430 (layerIndex 1)
+    this._addMountainLayer(1, 0.110, 0.141, 0.188, 0.85, -180, 120, 7, 0.8, false);
+    // Layer 3: nearby hills — #222C20 (layerIndex 2)
+    this._addMountainLayer(2, 0.133, 0.173, 0.125, 0.80, -100, 80, 10, 1.0, false);
     // Snow caps on far mountains (alpha 0.7, second layer)
     this._addSnowCaps(-280, 160, 5);
     this._addSnowCapsSecond(-280, 160, 5);
   }
 
-  _addMountainLayer(r, g, b, a, baseY, maxHeight, numPeaks, jaggedness, hasSnow) {
+  /**
+   * Get the current mountain color for the given layer, tinted by day/night ambient.
+   * @param {number} layerIndex — 0=far, 1=mid, 2=near
+   * @returns {string} CSS color string
+   */
+  _getMountainColor(layerIndex, baseR, baseG, baseB, baseA) {
+    if (!this._dayNight) {
+      return rgba(baseR, baseG, baseB, baseA);
+    }
+    const ambient = this._dayNight.getAmbientColor();
+    // Blend base color with ambient — mountains pick up lighting from environment
+    // Stronger ambient influence on near layer (layerIndex 2), weak on far
+    const blendFactors = [0.55, 0.45, 0.35];
+    const bf = blendFactors[layerIndex] || 0.45;
+    const r = baseR * (1 - bf) + ambient[0] * bf;
+    const g = baseG * (1 - bf) + ambient[1] * bf;
+    const b = baseB * (1 - bf) + ambient[2] * bf;
+    return rgba(r, g, b, baseA);
+  }
+
+  _addMountainLayer(layerIndex, r, g, b, a, baseY, maxHeight, numPeaks, jaggedness, hasSnow) {
     const phase = Math.random() * TAU;
     const steps = numPeaks * 6;
-    const color = rgba(r, g, b, a);
+    const terrain = this;
 
     const drawFn = (ctx) => {
-      ctx.fillStyle = color;
+      ctx.fillStyle = terrain._getMountainColor(layerIndex, r, g, b, a);
       ctx.beginPath();
       ctx.moveTo(0, 0);
       for (let i = 0; i <= steps; i++) {
@@ -904,6 +955,11 @@ export class Terrain extends Entity {
     const doorH = h * 0.42;
     const doorX = w * 0.5 - doorW * 0.5;
 
+    // Pre-bake a stable random value per window for lit/unlit decisions.
+    // Captured by the drawFn closure so each redraw uses the same base threshold.
+    const winRands = winPositions.map(() => Math.random());
+    const terrain = this;
+
     const drawFn = (ctx) => {
       ctx.save();
       ctx.translate(x, 0);
@@ -978,10 +1034,14 @@ export class Terrain extends Entity {
       // Windows — alternating lit/unlit with warm glow
       const winW = 8, winH = 9;
       const winY = -h * 0.58;
+      // winRands is pre-baked per-window for stable lit/unlit decisions across redraws.
+      // Window light factor is evaluated at draw time so it responds to tod changes.
       for (let wi2 = 0; wi2 < winPositions.length; wi2++) {
         const frac = winPositions[wi2];
         const wx = w * frac - winW * 0.5;
-        const isLit = (Math.floor(x * 7 + wi2 * 13) % 3) !== 0; // ~67% lit
+        const winLightFactor = terrain._dayNight ? terrain._dayNight.getWindowLightFactor() : 0.67;
+        // Each window has a stable random threshold; it lights up when threshold < light factor
+        const isLit = winRands[wi2] < (winLightFactor * 0.85 + 0.12);
         // Frame
         _fillRect(ctx, wx - 1.5, winY - 1.5, winW + 3, winH + 3, rgba(0.35, 0.30, 0.25));
         // Glass

@@ -42,8 +42,6 @@ const CROSSHAIR_GAP       = 14;  // gap around center (px)
 const CROSSHAIR_LINE_LEN  = 32;  // length of each crosshair arm
 const CROSSHAIR_BRACKET   = 10;  // corner bracket leg length
 const CROSSHAIR_BRACKET_D = 18;  // distance from centre to bracket corner
-const HEAT_LOCK_RADIUS    = 90;  // lock-circle radius for heat-seeker mode
-const TARGET_RING_RADIUS  = 22;  // ring drawn around locked target
 
 // Heat bar
 const HEAT_BAR_X      = LAUNCHER_PANEL_X;
@@ -101,6 +99,14 @@ export class UI {
     this._lockTimer = 0;
     this._lockPulseTimer = 0;
     this._lockParticles = [];
+
+    // Converging Chevrons crosshair rotation state
+    this._lockRingRotation = 0; // advances at 1.0 rad/s when locked, reset on lock loss
+    this._scanRotation = 0;     // for scanning circle rotation (+0.5 rad/s)
+
+    // Pending target position for particle origin injection
+    this._pendingTargetX = 0;
+    this._pendingTargetY = 0;
   }
 
   // ── Public API ────────────────────────────────────────────────────────
@@ -323,15 +329,19 @@ export class UI {
   updateLockState(locked, dt) {
     const wasLocked = this._lockActive;
 
+    // Always advance scan rotation regardless of lock state
+    this._scanRotation += 0.5 * dt;
+
     if (locked) {
       if (!wasLocked) {
         // Transition false→true: acquisition event
         this._lockJustAcquired = true;
         this._lockTimer = 0;
         this._lockPulseTimer = 0;
+        this._lockRingRotation = 0;
 
-        // Spawn 18-26 spark particles — much denser burst for dramatic effect.
-        // Stored relative to origin (0,0); ox/oy injected at draw time.
+        // Spawn 18-26 spark particles at target position.
+        // ox/oy will be set from target coords when first drawn.
         const count = 18 + Math.floor(Math.random() * 9); // 18..26
         for (let i = 0; i < count; i++) {
           const angle = Math.random() * Math.PI * 2;
@@ -352,6 +362,7 @@ export class UI {
       this._lockActive = true;
       this._lockTimer += dt;
       this._lockPulseTimer += dt;
+      this._lockRingRotation += 1.0 * dt; // 1.0 rad/s ring rotation
 
       // Update particles
       for (const p of this._lockParticles) {
@@ -376,6 +387,7 @@ export class UI {
       this._lockTimer = 0;
       this._lockPulseTimer = 0;
       this._lockParticles = [];
+      this._lockRingRotation = 0;
     }
   }
 
@@ -904,74 +916,59 @@ export class UI {
   }
 
   /**
-   * Heat-seeker crosshair: red arms, dashed outer circle, solid inner circle,
-   * 4 tick marks at N/S/E/W, slow rotation at 0.4 rad/s.
+   * Heat-seeker crosshair — Converging Chevrons design, scanning state.
+   * 4 arms at cursor, rotating dashed outer scan circle, center dot.
    * @param {CanvasRenderingContext2D} ctx
    * @param {number} mx
    * @param {number} my
    */
   _drawHeatCrosshair(ctx, mx, my) {
-    const color = '#FF4422';
-    // Slow rotation: 0.4 rad/s
-    const rotation = (Date.now() * 0.0004) % (Math.PI * 2);
+    const color = '#FF5500';
+    const armLen = 28;
+    const armGap = 12;
+    const scanR  = 80;
 
     ctx.save();
-    ctx.strokeStyle = color;
-    ctx.lineWidth = 2;
 
-    // Arms (same gap/len as default)
-    _hline(ctx, mx - CROSSHAIR_GAP - CROSSHAIR_LINE_LEN, my, mx - CROSSHAIR_GAP, my);
-    _hline(ctx, mx + CROSSHAIR_GAP, my, mx + CROSSHAIR_GAP + CROSSHAIR_LINE_LEN, my);
-    _vline(ctx, mx, my - CROSSHAIR_GAP - CROSSHAIR_LINE_LEN, mx, my - CROSSHAIR_GAP);
-    _vline(ctx, mx, my + CROSSHAIR_GAP, mx, my + CROSSHAIR_GAP + CROSSHAIR_LINE_LEN);
-
-    // Outer dashed circle (rotates)
-    ctx.save();
-    ctx.translate(mx, my);
-    ctx.rotate(rotation);
-    ctx.setLineDash([8, 6]);
-    ctx.beginPath();
-    ctx.arc(0, 0, HEAT_LOCK_RADIUS, 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.setLineDash([]);
-
-    // 4 tick marks at N/S/E/W on outer circle
-    ctx.lineWidth = 2;
-    ctx.strokeStyle = color;
-    for (let t = 0; t < 4; t++) {
-      const angle = t * Math.PI / 2;
-      const cos = Math.cos(angle), sin = Math.sin(angle);
-      ctx.beginPath();
-      ctx.moveTo(cos * (HEAT_LOCK_RADIUS - 4), sin * (HEAT_LOCK_RADIUS - 4));
-      ctx.lineTo(cos * (HEAT_LOCK_RADIUS + 6), sin * (HEAT_LOCK_RADIUS + 6));
-      ctx.stroke();
-    }
-    ctx.restore();
-
-    // Inner solid circle (counter-rotates slightly)
-    ctx.save();
-    ctx.translate(mx, my);
-    ctx.rotate(-rotation * 0.5);
+    // 4 arms
     ctx.strokeStyle = color;
     ctx.lineWidth = 1.5;
+    _hline(ctx, mx - armGap - armLen, my, mx - armGap, my);
+    _hline(ctx, mx + armGap, my, mx + armGap + armLen, my);
+    _vline(ctx, mx, my - armGap - armLen, mx, my - armGap);
+    _vline(ctx, mx, my + armGap, mx, my + armGap + armLen);
+
+    // Outer scan circle — dashed, rotates at +0.5 rad/s
+    ctx.save();
+    ctx.translate(mx, my);
+    ctx.rotate(this._scanRotation);
+    ctx.setLineDash([6, 5]);
+    ctx.strokeStyle = 'rgba(255,85,0,0.55)';
+    ctx.lineWidth = 1.5;
     ctx.beginPath();
-    ctx.arc(0, 0, HEAT_LOCK_RADIUS * 0.6, 0, Math.PI * 2);
+    ctx.arc(0, 0, scanR, 0, Math.PI * 2);
     ctx.stroke();
+    ctx.setLineDash([]);
     ctx.restore();
 
-    // Center dot
+    // Center dot r=3, fill #FF5500, shadow #FF3300 blur 6
+    ctx.save();
+    ctx.shadowColor = '#FF3300';
+    ctx.shadowBlur = 6;
     ctx.fillStyle = color;
     ctx.beginPath();
-    ctx.arc(mx, my, 2.5, 0, Math.PI * 2);
+    ctx.arc(mx, my, 3, 0, Math.PI * 2);
     ctx.fill();
+    ctx.restore();
 
     ctx.restore();
   }
 
   /**
-   * Locked-on crosshair: dramatic high-contrast flashing colors, large pulsing
-   * lock circle, rotating diamond overlay on acquisition, target ring, spark
-   * particles, and dashed tracking line.
+   * Locked-on crosshair: Converging Chevrons design.
+   * - At target (tx, ty): glow halo, acquisition flash rings, rotating arc segments
+   *   with chevrons, inner crosshair, "LOCKED" badge, spark particles.
+   * - At cursor (mx, my): simple 4-arm crosshair + center dot + "FIRE" label.
    * @param {CanvasRenderingContext2D} ctx
    * @param {number} mx
    * @param {number} my
@@ -984,185 +981,158 @@ export class UI {
     const tx = target.x + shakeX;
     const ty = target.y + shakeY;
 
-    // ── Color cycling: white → red → yellow → white, at ~4 Hz ──────────────
-    // During the acquisition flash window (first 0.3s) force blinding white.
-    // After that, cycle through hard high-contrast colors impossible to miss.
-    // Store as [R,G,B] floats 0..1 so we can easily compose alpha variants.
-    let cr, cg, cb;   // color components 0..1
-    let lineWidth;
-    if (this._lockTimer < 0.3) {
-      // Acquisition flash: full white, extra thick
-      const flashT = this._lockTimer / 0.3;  // 0→1
-      cr = 1; cg = 1; cb = 1;
-      lineWidth = 3.5 - flashT * 1.0;        // 3.5→2.5
-    } else {
-      // Post-acquisition: cycle red → yellow → white → red, at ~4 Hz
-      const cycle = (this._lockPulseTimer * 4) % 1; // 0..1
-      if (cycle < 0.33) {
-        const t = cycle / 0.33;
-        cr = 1; cg = t; cb = 0;
-      } else if (cycle < 0.66) {
-        const t = (cycle - 0.33) / 0.33;
-        cr = 1; cg = 1; cb = t;
-      } else {
-        const t = (cycle - 0.66) / 0.34;
-        cr = 1; cg = 1 - t; cb = 1 - t;
-      }
-      lineWidth = 2.5;
-    }
-    /** Full-opacity color string */
-    const crosshairColor = rgba(cr, cg, cb, 1.0);
-    /** Low-alpha variant for secondary elements */
-    const crosshairColorDim = rgba(cr, cg, cb, 0.38);
-    /** Mid-alpha variant for dashed line */
-    const crosshairColorMid = rgba(cr, cg, cb, 0.55);
+    const lockTimer = this._lockTimer;
 
-    // Full-screen flash at acquisition (first 0.15s)
-    if (this._lockTimer < 0.15) {
-      const flashA = 0.12 * (1 - this._lockTimer / 0.15);
+    // ── 1. Glow halo at target ─────────────────────────────────────────────
+    ctx.save();
+    const halo = ctx.createRadialGradient(tx, ty, 0, tx, ty, 52);
+    halo.addColorStop(0,    'rgba(255,80,0,0)');
+    halo.addColorStop(30/52,'rgba(255,80,0,0.08)');
+    halo.addColorStop(1,    'rgba(255,80,0,0)');
+    ctx.fillStyle = halo;
+    ctx.beginPath();
+    ctx.arc(tx, ty, 52, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+
+    // ── 2. Acquisition flash rings (lockTimer < 0.5s) ─────────────────────
+    if (lockTimer < 0.5) {
+      // Ring 1: white, lw 4→2
+      const t1 = lockTimer / 0.5;
+      const r1 = 30 + 55 * easeOutCubic(t1);
+      const a1 = 1 * (1 - t1);
       ctx.save();
-      ctx.fillStyle = `rgba(255,255,255,${flashA.toFixed(3)})`;
-      ctx.fillRect(0, 0, LOGICAL_W, LOGICAL_H);
+      ctx.strokeStyle = `rgba(255,255,255,${a1.toFixed(3)})`;
+      ctx.lineWidth = 4 - 2 * t1;
+      ctx.beginPath();
+      ctx.arc(tx, ty, r1, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+
+      // Ring 2: delay 0.05s, amber #FFBE28
+      if (lockTimer > 0.05) {
+        const t2 = (lockTimer - 0.05) / 0.45;
+        const r2 = 30 + 45 * easeOutCubic(t2);
+        const a2 = 0.7 * (1 - t2);
+        ctx.save();
+        ctx.strokeStyle = `rgba(255,190,40,${a2.toFixed(3)})`;
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        ctx.arc(tx, ty, r2, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      // Ring 3: delay 0.12s, orange #FF6400
+      if (lockTimer > 0.12) {
+        const t3 = (lockTimer - 0.12) / 0.38;
+        const r3 = 30 + 35 * easeOutCubic(t3);
+        const a3 = 0.5 * (1 - t3);
+        ctx.save();
+        ctx.strokeStyle = `rgba(255,100,0,${a3.toFixed(3)})`;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(tx, ty, r3, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+      }
+    }
+
+    // ── 3. Rotating arc segments with chevrons ─────────────────────────────
+    // On acquisition (lockTimer < 0.3): radius eases from 80 → 40
+    let lockR;
+    if (lockTimer < 0.3) {
+      lockR = 80 - 40 * easeOutCubic(lockTimer / 0.3);
+    } else {
+      // Steady r=40 with ±3px pulse at 8 rad/s
+      lockR = 40 + 3 * Math.sin(this._lockPulseTimer * 8);
+    }
+
+    const isAcquisition = lockTimer < 0.3;
+    const segSpan = (70 / 180) * Math.PI;
+    const gap     = (Math.PI * 2 - 4 * segSpan) / 4;
+
+    ctx.save();
+    ctx.translate(tx, ty);
+    ctx.rotate(this._lockRingRotation);
+
+    // Shadow glow
+    ctx.shadowColor = '#FF8800';
+    ctx.shadowBlur  = 12;
+    ctx.strokeStyle = isAcquisition ? '#FFFFFF' : '#FFAA00';
+    ctx.lineWidth   = isAcquisition ? 4 : 3;
+
+    for (let i = 0; i < 4; i++) {
+      const startAngle = i * (segSpan + gap);
+
+      // Arc segment
+      ctx.beginPath();
+      ctx.arc(0, 0, lockR, startAngle, startAngle + segSpan);
+      ctx.stroke();
+
+      // Chevron at arc midpoint, pointing outward
+      const midAngle = startAngle + segSpan / 2;
+      const cx2  = Math.cos(midAngle) * lockR;
+      const cy2  = Math.sin(midAngle) * lockR;
+      const outX = Math.cos(midAngle) * 10;
+      const outY = Math.sin(midAngle) * 10;
+      const perpX = -Math.sin(midAngle) * 5;
+      const perpY =  Math.cos(midAngle) * 5;
+      ctx.beginPath();
+      ctx.moveTo(cx2 + perpX, cy2 + perpY);
+      ctx.lineTo(cx2 + outX,  cy2 + outY);
+      ctx.lineTo(cx2 - perpX, cy2 - perpY);
+      ctx.stroke();
+    }
+    ctx.shadowBlur = 0;
+    ctx.restore();
+
+    // ── 4. Inner crosshair at target (fixed, not rotating) ─────────────────
+    ctx.save();
+    ctx.strokeStyle = 'rgba(255,170,0,0.9)';
+    ctx.lineWidth = 1.5;
+    const icLen = 10;
+    const icGap = 6;
+    _hline(ctx, tx - icGap - icLen, ty, tx - icGap, ty);
+    _hline(ctx, tx + icGap,         ty, tx + icGap + icLen, ty);
+    _vline(ctx, tx, ty - icGap - icLen, tx, ty - icGap);
+    _vline(ctx, tx, ty + icGap,         tx, ty + icGap + icLen);
+    ctx.restore();
+
+    // ── 5. "LOCKED" badge ──────────────────────────────────────────────────
+    if (lockTimer > 0.1) {
+      const badgeAlpha = Math.min(lockTimer / 0.2, 1);
+      const badgeColor = lockTimer < 0.3 ? '#FFFFFF' : '#FFAA00';
+      const badgeX = tx - 42;
+      const badgeY = ty - 70 - 15; // center of pill at ty-70
+      ctx.save();
+      ctx.globalAlpha = badgeAlpha;
+      // Dark pill background
+      ctx.fillStyle = 'rgba(0,0,0,0.55)';
+      _roundRect(ctx, badgeX, badgeY, 84, 30, 6);
+      ctx.fill();
+      // Badge text
+      ctx.font = 'bold 22px monospace';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillStyle = badgeColor;
+      ctx.fillText('LOCKED', tx, ty - 70);
       ctx.restore();
     }
 
+    // ── 6. Spark particles — origin at (tx, ty) ───────────────────────────
     ctx.save();
-    ctx.strokeStyle = crosshairColor;
-    ctx.lineWidth = lineWidth;
-
-    // Crosshair arms (slightly longer than default for visibility)
-    const armLen = CROSSHAIR_LINE_LEN + 10;
-    _hline(ctx, mx - CROSSHAIR_GAP - armLen, my, mx - CROSSHAIR_GAP, my);
-    _hline(ctx, mx + CROSSHAIR_GAP, my, mx + CROSSHAIR_GAP + armLen, my);
-    _vline(ctx, mx, my - CROSSHAIR_GAP - armLen, mx, my - CROSSHAIR_GAP);
-    _vline(ctx, mx, my + CROSSHAIR_GAP, mx, my + CROSSHAIR_GAP + armLen);
-
-    // A) Lock circle — larger radius, more aggressive pulse amplitude and speed
-    const lockBaseR = HEAT_LOCK_RADIUS + 16;                // 16px larger base
-    const lockR = lockBaseR + 10 * Math.sin(this._lockPulseTimer * 14);
-    const lockLW = 2.5 + 1.5 * (0.5 + 0.5 * Math.sin(this._lockPulseTimer * 14));
-    ctx.strokeStyle = crosshairColor;
-    ctx.lineWidth = lockLW;
-    ctx.beginPath();
-    ctx.arc(mx, my, lockR, 0, Math.PI * 2);
-    ctx.stroke();
-
-    // B) Rotating diamond (4-pointed angular shape) — appears during acquisition
-    //    window and stays spinning at reduced opacity afterward
-    const diamondAngle = this._lockPulseTimer * 3.5; // continuous rotation
-    const diamondOpacity = this._lockTimer < 0.5 ? 1.0 : 0.65;
-    const diamondSize = this._lockTimer < 0.3
-      ? (28 + 18 * (this._lockTimer / 0.3))  // grows during flash
-      : 44;
-    ctx.save();
-    ctx.translate(mx, my);
-    ctx.rotate(diamondAngle);
-    ctx.strokeStyle = crosshairColor;
-    ctx.globalAlpha = diamondOpacity;
-    ctx.lineWidth = lineWidth;
-    // Draw diamond: 4 vertices at ±diamondSize on each axis
-    const ds = diamondSize;
-    const notch = ds * 0.35; // inner notch to make it look angular/tactical
-    ctx.beginPath();
-    ctx.moveTo(0, -ds);         // top
-    ctx.lineTo(notch, -notch);  // inner top-right
-    ctx.lineTo(ds, 0);          // right
-    ctx.lineTo(notch, notch);   // inner bottom-right
-    ctx.lineTo(0, ds);          // bottom
-    ctx.lineTo(-notch, notch);  // inner bottom-left
-    ctx.lineTo(-ds, 0);         // left
-    ctx.lineTo(-notch, -notch); // inner top-left
-    ctx.closePath();
-    ctx.stroke();
-    ctx.restore();
-
-    // C) Acquisition flash: multiple expanding rings for maximum drama
-    if (this._lockTimer < 0.45) {
-      const flashT = this._lockTimer / 0.45;  // 0→1
-      // Primary blast ring
-      const flashR1 = 55 + 60 * flashT;
-      const flashA1 = 1.0 * (1 - flashT);
-      ctx.strokeStyle = `rgba(255,255,255,${flashA1.toFixed(3)})`;
-      ctx.lineWidth = 4 - flashT * 2;
-      ctx.beginPath();
-      ctx.arc(mx, my, flashR1, 0, Math.PI * 2);
-      ctx.stroke();
-
-      // Secondary ring (slightly delayed)
-      if (this._lockTimer > 0.05) {
-        const flash2T = (this._lockTimer - 0.05) / 0.40;
-        const flashR2 = 55 + 45 * flash2T;
-        const flashA2 = 0.7 * (1 - flash2T);
-        ctx.strokeStyle = `rgba(255,220,50,${flashA2.toFixed(3)})`;
-        ctx.lineWidth = 2.5;
-        ctx.beginPath();
-        ctx.arc(mx, my, flashR2, 0, Math.PI * 2);
-        ctx.stroke();
-      }
-    }
-
-    // D) Target ring — pulsing radius around locked entity, more aggressive
-    const ringPulse = 4 * Math.sin(this._lockPulseTimer * 14);
-    const innerR = TARGET_RING_RADIUS + ringPulse;
-    const outerR = innerR + 12;
-
-    ctx.strokeStyle = crosshairColor;
-    ctx.lineWidth = 2.5;
-    ctx.beginPath();
-    ctx.arc(tx, ty, innerR, 0, Math.PI * 2);
-    ctx.stroke();
-
-    // Outer glow ring on target
-    ctx.strokeStyle = crosshairColorDim;
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.arc(tx, ty, outerR, 0, Math.PI * 2);
-    ctx.stroke();
-
-    // 8 tick marks (cardinal 8px, diagonal 4px)
-    const tickR = innerR + 2;
-    ctx.strokeStyle = crosshairColor;
-    for (let ti = 0; ti < 8; ti++) {
-      const angle = ti * Math.PI / 4;
-      const isCardinal = ti % 2 === 0;
-      const tLen = isCardinal ? 8 : 4;
-      const tLW = isCardinal ? 2 : 1.5;
-      ctx.lineWidth = tLW;
-      const cos = Math.cos(angle), sin = Math.sin(angle);
-      ctx.beginPath();
-      ctx.moveTo(tx + cos * tickR, ty + sin * tickR);
-      ctx.lineTo(tx + cos * (tickR + tLen), ty + sin * (tickR + tLen));
-      ctx.stroke();
-    }
-
-    // Dashed line from cursor to target
-    ctx.strokeStyle = crosshairColor.replace(/,[^,)]+\)$/, ',0.55)');
-    ctx.lineWidth = 1.5;
-    ctx.setLineDash([10, 8]);
-    ctx.beginPath();
-    ctx.moveTo(mx, my);
-    ctx.lineTo(tx, ty);
-    ctx.stroke();
-    ctx.setLineDash([]);
-
-    // Center dot — larger
-    ctx.fillStyle = crosshairColor;
-    ctx.beginPath();
-    ctx.arc(mx, my, 4, 0, Math.PI * 2);
-    ctx.fill();
-
-    // E) Spark particles — need cursor origin; initialise ox/oy on first draw
     for (const p of this._lockParticles) {
-      // Set origin once when particle is first drawn (ox/oy are 0 initially)
+      // Set origin to target position on first draw
       if (p.ox === 0 && p.oy === 0) {
-        p.ox = mx;
-        p.oy = my;
+        p.ox = tx;
+        p.oy = ty;
       }
-      const lifeRatio = p.life / p.maxLife;          // 1→0
+      const lifeRatio = p.life / p.maxLife; // 1→0
       const alpha = Math.max(0, lifeRatio);
       const r = p.radius * lifeRatio;
       if (r < 0.5) continue;
-      // White→yellow→orange gradient per particle life
+      // White→yellow→orange color by lifetime
       const particleR = 255;
       const particleG = Math.round((0.9 - 0.5 * (1 - lifeRatio)) * 255);
       const particleB = Math.round(lifeRatio > 0.6 ? 255 * (lifeRatio - 0.6) / 0.4 : 0);
@@ -1171,8 +1141,40 @@ export class UI {
       ctx.arc(p.ox + p.x, p.oy + p.y, r, 0, Math.PI * 2);
       ctx.fill();
     }
-
     ctx.restore();
+
+    // ── 7. Cursor crosshair at (mx, my) — no scan circles ─────────────────
+    ctx.save();
+    ctx.strokeStyle = '#FFAA00';
+    ctx.lineWidth = 2;
+    const cArmLen = 28;
+    const cArmGap = 12;
+    _hline(ctx, mx - cArmGap - cArmLen, my, mx - cArmGap, my);
+    _hline(ctx, mx + cArmGap,           my, mx + cArmGap + cArmLen, my);
+    _vline(ctx, mx, my - cArmGap - cArmLen, mx, my - cArmGap);
+    _vline(ctx, mx, my + cArmGap,           mx, my + cArmGap + cArmLen);
+    ctx.restore();
+
+    // Center dot at cursor
+    ctx.save();
+    ctx.shadowColor = '#FF8800';
+    ctx.shadowBlur  = 10;
+    ctx.fillStyle   = '#FFAA00';
+    ctx.beginPath();
+    ctx.arc(mx, my, 4, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+
+    // "FIRE" label below cursor, visible after lockTimer > 0.35s
+    if (lockTimer > 0.35) {
+      ctx.save();
+      ctx.font = 'bold 18px monospace';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'top';
+      ctx.fillStyle = 'rgba(255,170,0,0.7)';
+      ctx.fillText('FIRE', mx, my + 28);
+      ctx.restore();
+    }
   }
 
   /**
@@ -1235,6 +1237,17 @@ export class UI {
 
     ctx.restore();
   }
+}
+
+// ── Module-private math helpers ───────────────────────────────────────────
+
+/**
+ * Cubic ease-out: fast start, decelerates to stop. t clamped to [0,1].
+ * @param {number} t
+ * @returns {number}
+ */
+function easeOutCubic(t) {
+  return 1 - Math.pow(1 - Math.min(Math.max(t, 0), 1), 3);
 }
 
 // ── Module-private canvas helpers ─────────────────────────────────────────

@@ -113,10 +113,11 @@ All multi-agent work MUST also be logged to `SESSION_LOG.md` in the project root
 4. **Task list snapshot**: After each phase, include a markdown table linking to GitHub issues with their statuses.
 
 ### When to log:
+- **IMMEDIATELY after every agent completes**: add their results, TLDR verbatim, and improvement insights. Do NOT batch these — update SESSION_LOG.md right after processing each agent result, before doing anything else.
 - BEFORE spawning agents: note the spawn in the log
-- AFTER agents complete: add their results and TLDR
 - After each phase completes: add task list snapshot with issue links
 - After direct implementation by team lead: log what was done, files changed, and reasoning
+- After user decisions (closing issues, changing specs): log the decision and rationale
 
 ### Log format:
 ```markdown
@@ -163,4 +164,14 @@ After completing your task, reflect on what you learned and suggest improvements
 - **[workflow]**: [specific suggestion, e.g. "UI overhaul specs are too large for one developer — split into multiple issues"]
 ```
 
-Only include actionable, specific suggestions — not generic praise or complaints. The team lead will review and apply relevant improvements to agent definitions and project docs between sessions.
+Only include actionable, specific suggestions — not generic praise or complaints.
+
+### Team Lead Retrospective (MANDATORY — after every agent completes):
+1. **Capture the agent's full TLDR verbatim** in SESSION_LOG.md — do not paraphrase
+2. **Read the agent's Improvement Insights** section
+3. **Evaluate each suggestion** — is it valid? Would it save time next run?
+4. **Apply valid suggestions immediately** — edit agent definitions, CLAUDE.md, skills, or workflow docs
+5. **Log what was applied** in SESSION_LOG.md under a "Retrospective" heading
+6. **If a suggestion is rejected**, note why briefly in the log
+
+This is how the team actually improves. Without this step, agent insights are generated and ignored.

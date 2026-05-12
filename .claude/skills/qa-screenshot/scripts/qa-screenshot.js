@@ -204,6 +204,7 @@ async function run() {
     console.log('\n=== NO CONSOLE ERRORS ===');
   }
 
+  console.log(`\n=== DONE: ${shotIndex} screenshot(s) saved to ${OUT_DIR} ===`);
   await browser.close();
 }
 
