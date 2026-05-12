@@ -31,7 +31,7 @@ const LAUNCHER_SLOTS = [
 ];
 
 // Nuke warning duration
-const NUKE_WARNING_DURATION = 3.0; // seconds
+const NUKE_WARNING_DURATION = 5.0; // seconds
 
 // Wave banner animation phases
 const BANNER_FADE_IN  = 0.35; // seconds
@@ -42,7 +42,7 @@ const CROSSHAIR_GAP       = 14;  // gap around center (px)
 const CROSSHAIR_LINE_LEN  = 32;  // length of each crosshair arm
 const CROSSHAIR_BRACKET   = 10;  // corner bracket leg length
 const CROSSHAIR_BRACKET_D = 18;  // distance from centre to bracket corner
-const HEAT_LOCK_RADIUS    = 50;  // lock-circle radius for heat-seeker mode
+const HEAT_LOCK_RADIUS    = 90;  // lock-circle radius for heat-seeker mode
 const TARGET_RING_RADIUS  = 22;  // ring drawn around locked target
 
 // Heat bar
@@ -135,25 +135,14 @@ export class UI {
   drawHUD(ctx, game, dt = 1 / 60) {
     if (game.state === 'start') return; // start screen handled by game.js
 
-    // ── Score + wave (top-left) ──
-    const scoreText = `Score: ${game.score}`;
-    this._renderer.drawText(scoreText, 40, 36, 'bold 40px monospace', rgba(1, 1, 1), 'left');
-    if (game.waveNumber > 0) {
-      const waveText = `Wave ${game.waveNumber}`;
-      this._renderer.drawText(waveText, 40, 84, '32px monospace', rgba(0.7, 0.85, 1), 'left');
-    }
+    // ── Score + wave panel (top-left) ──
+    this._drawScorePanel(ctx, game);
 
     // ── Contextual info (top-center) — suppressed while nuke warning is active ──
     if (!this._nukeWarningActive) {
       const infoMsg = this._getInfoText(game);
       if (infoMsg) {
-        this._renderer.drawText(
-          infoMsg,
-          LOGICAL_W / 2, 36,
-          '30px monospace',
-          rgba(0.85, 0.85, 0.85, 0.85),
-          'center',
-        );
+        this._drawContextualInfo(ctx, infoMsg);
       }
     }
 
@@ -214,25 +203,77 @@ export class UI {
     const cx = LOGICAL_W / 2;
     const cy = LOGICAL_H / 2;
 
-    // Subtle dark semi-transparent backdrop strip
+    // Backdrop: rounded rect 1200x148 with vignette gradient fading at edges
     ctx.save();
-    ctx.globalAlpha = alpha * 0.45;
-    ctx.fillStyle = 'rgba(0,0,0,0.7)';
-    ctx.fillRect(cx - 520, cy - 70, 1040, 130);
+    ctx.globalAlpha = alpha * 0.85;
+    const bdW = 1200, bdH = 148;
+    const bdX = cx - bdW / 2, bdY = cy - bdH / 2;
+    const vigGrad = ctx.createLinearGradient(bdX, cy, bdX + bdW, cy);
+    vigGrad.addColorStop(0,   'rgba(0,0,0,0)');
+    vigGrad.addColorStop(0.08,'rgba(0,0,0,0.75)');
+    vigGrad.addColorStop(0.92,'rgba(0,0,0,0.75)');
+    vigGrad.addColorStop(1,   'rgba(0,0,0,0)');
+    ctx.fillStyle = vigGrad;
+    _roundRect(ctx, bdX, bdY, bdW, bdH, 12);
+    ctx.fill();
     ctx.restore();
 
-    // Main banner text
+    // Flanking horizontal lines
+    ctx.save();
+    ctx.globalAlpha = alpha * 0.35;
+    ctx.strokeStyle = 'rgba(255,210,50,0.35)';
+    ctx.lineWidth = 1.5;
+    const lineY = cy;
+    const lineInset = 80;
+    const lineLen = 320;
+    ctx.beginPath();
+    ctx.moveTo(cx - bdW / 2 + lineInset, lineY);
+    ctx.lineTo(cx - bdW / 2 + lineInset + lineLen, lineY);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(cx + bdW / 2 - lineInset - lineLen, lineY);
+    ctx.lineTo(cx + bdW / 2 - lineInset, lineY);
+    ctx.stroke();
+    ctx.restore();
+
+    // Diamond decorations at line ends
+    ctx.save();
+    ctx.globalAlpha = alpha * 0.6;
+    ctx.fillStyle = 'rgba(255,210,50,0.6)';
+    const diamondPositions = [
+      cx - bdW / 2 + lineInset,
+      cx - bdW / 2 + lineInset + lineLen,
+      cx + bdW / 2 - lineInset - lineLen,
+      cx + bdW / 2 - lineInset,
+    ];
+    for (const dx of diamondPositions) {
+      const ds = 7;
+      ctx.beginPath();
+      ctx.moveTo(dx, lineY - ds);
+      ctx.lineTo(dx + ds, lineY);
+      ctx.lineTo(dx, lineY + ds);
+      ctx.lineTo(dx - ds, lineY);
+      ctx.closePath();
+      ctx.fill();
+    }
+    ctx.restore();
+
+    // Main banner text — bold 108px #FFD700, drop shadow blur 20
     ctx.save();
     ctx.globalAlpha = alpha;
-    ctx.font = 'bold 96px monospace';
-    ctx.fillStyle = this._bannerColor;
+    ctx.font = 'bold 108px monospace';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    // Drop shadow
-    ctx.shadowColor = 'rgba(0,0,0,0.7)';
-    ctx.shadowBlur = 18;
+    // Drop shadow pass
+    ctx.shadowColor = 'rgba(0,0,0,0.8)';
+    ctx.shadowBlur = 20;
+    ctx.fillStyle = this._bannerColor;
     ctx.fillText(this._bannerText, cx, cy);
     ctx.shadowBlur = 0;
+    // White highlight pass at offset (1,-1)
+    ctx.globalAlpha = alpha * 0.25;
+    ctx.fillStyle = '#FFFFFF';
+    ctx.fillText(this._bannerText, cx + 1, cy - 1);
     ctx.restore();
   }
 
@@ -268,7 +309,7 @@ export class UI {
     } else if (isHeat) {
       this._drawHeatCrosshair(ctx, mx, my);
     } else {
-      this._drawDefaultCrosshair(ctx, mx, my);
+      this._drawDefaultCrosshair(ctx, mx, my, sel);
     }
   }
 
@@ -341,6 +382,86 @@ export class UI {
   // ── Private draw helpers ───────────────────────────────────────────────
 
   /**
+   * Score/wave display panel — top-left, 320x110px.
+   * @param {CanvasRenderingContext2D} ctx
+   * @param {object} game
+   */
+  _drawScorePanel(ctx, game) {
+    const px = 24, py = 24, pw = 320, ph = 110;
+    ctx.save();
+
+    // Panel background gradient
+    const bg = ctx.createLinearGradient(px, py, px, py + ph);
+    bg.addColorStop(0, 'rgba(8,14,28,0.88)');
+    bg.addColorStop(1, 'rgba(4,8,18,0.78)');
+    ctx.fillStyle = bg;
+    _roundRect(ctx, px, py, pw, ph, 10);
+    ctx.fill();
+
+    // Left accent bar — 3px #00EEFF with shadowBlur=8
+    ctx.shadowColor = '#00EEFF';
+    ctx.shadowBlur = 8;
+    ctx.fillStyle = '#00EEFF';
+    ctx.fillRect(px, py + 8, 3, ph - 16);
+    ctx.shadowBlur = 0;
+
+    // Score label
+    ctx.font = '20px monospace';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'top';
+    ctx.fillStyle = '#8899CC';
+    ctx.fillText('SCORE', px + 14, py + 12);
+
+    // Score value — bold 52px white monospace
+    ctx.font = 'bold 52px monospace';
+    ctx.fillStyle = '#FFFFFF';
+    ctx.fillText(String(game.score), px + 14, py + 34);
+
+    // Wave value — bold 36px #88CCFF
+    // Suppressed while the centered wave banner is animating to avoid duplication.
+    if (game.waveNumber > 0 && this._bannerPhase === 'idle') {
+      ctx.font = 'bold 36px monospace';
+      ctx.fillStyle = '#88CCFF';
+      ctx.textAlign = 'right';
+      ctx.textBaseline = 'bottom';
+      ctx.fillText(`WAVE ${game.waveNumber}`, px + pw - 12, py + ph - 10);
+    }
+
+    ctx.restore();
+  }
+
+  /**
+   * Contextual info pill — top-center.
+   * @param {CanvasRenderingContext2D} ctx
+   * @param {string} msg
+   */
+  _drawContextualInfo(ctx, msg) {
+    ctx.save();
+    ctx.font = '28px monospace';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    const tw = ctx.measureText(msg).width;
+    const cx = LOGICAL_W / 2;
+    const cy = 40;
+    const pr = 14; // pill radius
+    const pw = tw + pr * 2;
+
+    // Pill background
+    ctx.fillStyle = 'rgba(6,12,24,0.70)';
+    _roundRect(ctx, cx - pw / 2, cy - 22, pw, 44, pr);
+    ctx.fill();
+
+    // Text with shadow glow
+    ctx.shadowColor = 'rgba(180,210,255,0.5)';
+    ctx.shadowBlur = 8;
+    ctx.fillStyle = '#BBCCDD';
+    ctx.fillText(msg, cx, cy);
+    ctx.shadowBlur = 0;
+
+    ctx.restore();
+  }
+
+  /**
    * Build contextual info string for the selected launcher.
    * @param {object} game
    * @returns {string}
@@ -410,76 +531,87 @@ export class UI {
 
     ctx.save();
 
-    // Card background
+    // Card background gradient
+    const bg = ctx.createLinearGradient(x, y, x, y + h);
     if (isSelected) {
-      // Highlighted background
-      ctx.fillStyle = 'rgba(40,90,160,0.72)';
+      bg.addColorStop(0, 'rgba(8,30,68,0.92)');
+      bg.addColorStop(1, 'rgba(4,18,48,0.92)');
     } else if (!isAlive) {
-      // Destroyed — very dark
-      ctx.fillStyle = 'rgba(20,12,12,0.80)';
+      bg.addColorStop(0, 'rgba(28,10,10,0.88)');
+      bg.addColorStop(1, 'rgba(18,6,6,0.88)');
     } else {
-      ctx.fillStyle = 'rgba(10,14,22,0.72)';
+      bg.addColorStop(0, 'rgba(10,16,28,0.85)');
+      bg.addColorStop(1, 'rgba(6,10,18,0.85)');
     }
+    ctx.fillStyle = bg;
     _roundRect(ctx, x, y, w, h, 8);
     ctx.fill();
 
     // Border
     if (isSelected) {
-      ctx.strokeStyle = rgba(0.4, 0.7, 1.0, 0.9);
-      ctx.lineWidth = 2.5;
+      ctx.shadowColor = '#00CCFF';
+      ctx.shadowBlur = 14;
+      ctx.strokeStyle = 'rgba(0,180,255,0.85)';
+      ctx.lineWidth = 1.5;
     } else if (!isAlive) {
-      ctx.strokeStyle = rgba(0.35, 0.2, 0.2, 0.5);
-      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = 'rgba(100,30,30,0.4)';
+      ctx.lineWidth = 1;
     } else {
-      ctx.strokeStyle = rgba(0.35, 0.45, 0.55, 0.5);
-      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = 'rgba(40,60,80,0.55)';
+      ctx.lineWidth = 1;
     }
     _roundRect(ctx, x, y, w, h, 8);
     ctx.stroke();
+    ctx.shadowBlur = 0;
 
-    // Key number (top-left inside card)
-    ctx.font = 'bold 26px monospace';
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'top';
-    ctx.fillStyle = isSelected ? rgba(0.6, 0.85, 1) : rgba(0.5, 0.55, 0.6, 0.8);
-    ctx.fillText(`[${slot.key}]`, x + 10, y + 10);
+    // Key badge — 32x22px rounded rect at top-left
+    const badgeX = x + 8, badgeY = y + 8, badgeW = 32, badgeH = 22;
+    ctx.fillStyle = 'rgba(0,0,0,0.5)';
+    _roundRect(ctx, badgeX, badgeY, badgeW, badgeH, 5);
+    ctx.fill();
+    ctx.font = 'bold 18px monospace';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = isSelected ? '#88CCFF' : '#6699CC';
+    ctx.fillText(`[${slot.key}]`, badgeX + badgeW / 2, badgeY + badgeH / 2);
 
-    // Type label (centre-left)
+    // Type label
     ctx.font = 'bold 28px monospace';
     ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
     if (!isAlive) {
-      ctx.fillStyle = rgba(0.55, 0.25, 0.25, 0.7);
+      ctx.fillStyle = 'rgba(140,64,64,0.7)';
     } else if (isSelected) {
-      ctx.fillStyle = rgba(1, 1, 1);
+      ctx.fillStyle = '#FFFFFF';
     } else {
-      ctx.fillStyle = rgba(0.75, 0.82, 0.88);
+      ctx.fillStyle = 'rgba(192,210,224,1)';
     }
-    ctx.fillText(slot.label, x + 10, y + h / 2 + 6);
+    ctx.fillText(slot.label, x + 48, y + h / 2 + 6);
 
-    // "DESTROYED" label if dead
+    // Status dot at top-right
+    const dotX = x + w - 16, dotY = y + 16;
+    ctx.beginPath();
+    ctx.arc(dotX, dotY, 5, 0, Math.PI * 2);
     if (!isAlive) {
-      ctx.font = 'bold 20px monospace';
+      ctx.fillStyle = '#441111';
+    } else if (isSelected) {
+      // SELECTED — cyan pulsing
+      const pulse = 0.6 + 0.4 * Math.sin(Date.now() * 0.006);
+      ctx.fillStyle = `rgba(68,${Math.round(204 * pulse)},255,${pulse.toFixed(2)})`;
+    } else {
+      // READY — green pulsing
+      const pulse = 0.7 + 0.3 * Math.sin(Date.now() * 0.004);
+      ctx.fillStyle = `rgba(34,${Math.round(204 * pulse)},85,${pulse.toFixed(2)})`;
+    }
+    ctx.fill();
+
+    // "DESTROYED" label
+    if (!isAlive) {
+      ctx.font = 'bold 18px monospace';
       ctx.textAlign = 'right';
       ctx.textBaseline = 'bottom';
-      ctx.fillStyle = rgba(0.85, 0.25, 0.2, 0.9);
+      ctx.fillStyle = 'rgba(217,64,51,0.9)';
       ctx.fillText('DESTROYED', x + w - 10, y + h - 8);
-    }
-
-    // READY indicator (small dot) when alive and not selected
-    if (isAlive && !isSelected) {
-      ctx.beginPath();
-      ctx.arc(x + w - 16, y + 16, 5, 0, Math.PI * 2);
-      ctx.fillStyle = rgba(0.2, 0.85, 0.4, 0.8);
-      ctx.fill();
-    }
-
-    // Selected indicator (bright dot)
-    if (isSelected) {
-      ctx.beginPath();
-      ctx.arc(x + w - 16, y + 16, 5, 0, Math.PI * 2);
-      ctx.fillStyle = rgba(0.4, 0.9, 1.0);
-      ctx.fill();
     }
 
     ctx.restore();
@@ -494,8 +626,8 @@ export class UI {
   _drawHeatBar(ctx, heat, overheated) {
     const x = HEAT_BAR_X;
     const y = HEAT_BAR_BOTTOM - HEAT_BAR_H;
-    const w = HEAT_BAR_W;
-    const h = HEAT_BAR_H;
+    const w = 240; // match spec 240px
+    const h = 28;  // match spec 28px
 
     ctx.save();
 
@@ -506,34 +638,70 @@ export class UI {
     ctx.fillStyle = rgba(0.7, 0.75, 0.8, 0.9);
     ctx.fillText('HEAT', x, y - 4);
 
-    // Track (background)
-    ctx.fillStyle = 'rgba(8,6,6,0.75)';
-    _roundRect(ctx, x, y, w, h, 4);
+    // Track — rgba(6,6,8,0.85) rounded r=5
+    ctx.fillStyle = 'rgba(6,6,8,0.85)';
+    _roundRect(ctx, x, y, w, h, 5);
     ctx.fill();
     ctx.strokeStyle = 'rgba(80,60,60,0.6)';
     ctx.lineWidth = 1.5;
-    _roundRect(ctx, x, y, w, h, 4);
+    _roundRect(ctx, x, y, w, h, 5);
     ctx.stroke();
 
-    // Fill
+    // Fill gradient: 0-40% green→yellow, 40-75% →orange, 75-100% →red
     const fillW = clamp(heat, 0, 1) * (w - 4);
     if (fillW > 0) {
-      ctx.fillStyle = overheated
-        ? rgba(1, 0.1 + 0.2 * Math.sin(Date.now() * 0.012), 0.05)
-        : heatBarColor(heat);
-      _roundRect(ctx, x + 2, y + 2, fillW, h - 4, 3);
+      if (overheated) {
+        // Pulsing red when overheated
+        const pulse = 0.1 + 0.2 * Math.sin(Date.now() * 0.012);
+        ctx.fillStyle = `rgba(255,${Math.round(pulse * 255)},13,1)`;
+      } else {
+        // Color gradient fill along the bar
+        const grad = ctx.createLinearGradient(x + 2, y, x + 2 + fillW, y);
+        if (heat <= 0.4) {
+          grad.addColorStop(0, '#22DD44');
+          grad.addColorStop(1, '#CCE820');
+        } else if (heat <= 0.75) {
+          grad.addColorStop(0, '#22DD44');
+          grad.addColorStop(0.4 / heat, '#CCE820');
+          grad.addColorStop(1, '#FF8800');
+        } else {
+          grad.addColorStop(0, '#22DD44');
+          grad.addColorStop(0.4 / heat, '#CCE820');
+          grad.addColorStop(0.75 / heat, '#FF8800');
+          grad.addColorStop(1, '#FF1100');
+        }
+        ctx.fillStyle = grad;
+      }
+
+      // Glow at heat > 0.8
+      if (heat > 0.8) {
+        ctx.shadowColor = '#FF4400';
+        ctx.shadowBlur = 12;
+      }
+      _roundRect(ctx, x + 2, y + 2, fillW, h - 4, 4);
       ctx.fill();
+      ctx.shadowBlur = 0;
     }
 
-    // OVERHEATED warning text
+    // Tick marks at 25/50/75/100%
+    ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+    ctx.lineWidth = 1;
+    for (let t = 1; t <= 4; t++) {
+      const tx = x + (t / 4) * (w - 4) + 2;
+      ctx.beginPath();
+      ctx.moveTo(tx, y + 2);
+      ctx.lineTo(tx, y + h - 2);
+      ctx.stroke();
+    }
+
+    // OVERHEATED warning text — blink 0.3s on/off
     if (overheated) {
-      ctx.font = 'bold 20px monospace';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      // Blink at ~3 Hz
-      const blink = Math.sin(Date.now() * 0.019) > 0;
+      const blink = Math.floor(Date.now() / 300) % 2 === 0;
       if (blink) {
-        ctx.fillStyle = rgba(1, 0.9, 0.9);
+        ctx.font = 'bold 20px monospace';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillStyle = '#FF3311';
         ctx.fillText('OVERHEATED', x + w / 2, y + h / 2);
       }
     }
@@ -556,67 +724,145 @@ export class UI {
       return;
     }
 
-    // Blinking effect
-    const blink = Math.sin(Date.now() * 0.015) > 0;
-    if (!blink) return;
-
-    // Fade out in last 0.5s
-    const fadeStart = 0.5;
-    let alpha = 1.0;
+    // Spec 12: Smooth alpha pulse (replaces hard blink)
+    // Base alpha: fade out in last 1.0s
+    const fadeStart = 1.0;
+    let baseAlpha = 1.0;
     if (this._nukeWarningTimer < fadeStart) {
-      alpha = this._nukeWarningTimer / fadeStart;
+      baseAlpha = this._nukeWarningTimer / fadeStart;
     }
+    // Smooth sine pulse at ~2 Hz — never goes to zero (stays 50–100% of base)
+    const pulse = 0.5 + 0.5 * Math.sin(Date.now() * 0.013);
+    const alpha = baseAlpha * (0.55 + 0.45 * pulse);
 
-    const barW = 1000;
-    const barH = 70;
+    const barW = 1100;
+    const barH = 80;
     const barX = (LOGICAL_W - barW) / 2;
-    const barY = 215; // below HUD text area (score ~36, wave ~84), above gameplay
+    const barY = 215;
+
+    // Spec 12: Red screen-edge vignette during warning
+    ctx.save();
+    ctx.globalAlpha = baseAlpha * (0.18 + 0.14 * pulse);
+    const vigW = LOGICAL_W;
+    const vigH = LOGICAL_H;
+    const vigSize = 220;
+    // Top edge
+    const vigTop = ctx.createLinearGradient(0, 0, 0, vigSize);
+    vigTop.addColorStop(0, 'rgba(200,0,0,1)');
+    vigTop.addColorStop(1, 'rgba(200,0,0,0)');
+    ctx.fillStyle = vigTop;
+    ctx.fillRect(0, 0, vigW, vigSize);
+    // Bottom edge
+    const vigBottom = ctx.createLinearGradient(0, vigH - vigSize, 0, vigH);
+    vigBottom.addColorStop(0, 'rgba(200,0,0,0)');
+    vigBottom.addColorStop(1, 'rgba(200,0,0,1)');
+    ctx.fillStyle = vigBottom;
+    ctx.fillRect(0, vigH - vigSize, vigW, vigSize);
+    // Left edge
+    const vigLeft = ctx.createLinearGradient(0, 0, vigSize, 0);
+    vigLeft.addColorStop(0, 'rgba(200,0,0,1)');
+    vigLeft.addColorStop(1, 'rgba(200,0,0,0)');
+    ctx.fillStyle = vigLeft;
+    ctx.fillRect(0, 0, vigSize, vigH);
+    // Right edge
+    const vigRight = ctx.createLinearGradient(vigW - vigSize, 0, vigW, 0);
+    vigRight.addColorStop(0, 'rgba(200,0,0,0)');
+    vigRight.addColorStop(1, 'rgba(200,0,0,1)');
+    ctx.fillStyle = vigRight;
+    ctx.fillRect(vigW - vigSize, 0, vigSize, vigH);
+    ctx.restore();
+
+    // Subtle 1% scale pulse
+    const scalePulse = 1 + 0.01 * Math.sin(Date.now() * 0.01);
 
     ctx.save();
     ctx.globalAlpha = alpha;
+    // Apply scale pulse from center of bar
+    ctx.translate(LOGICAL_W / 2, barY + barH / 2);
+    ctx.scale(scalePulse, scalePulse);
+    ctx.translate(-(LOGICAL_W / 2), -(barY + barH / 2));
 
-    // Dark shadow rect behind the red bar to prevent HUD text bleed-through
-    const padX = 12;
-    const padY = 8;
+    // Shadow rect
+    const padX = 12, padY = 8;
     ctx.fillStyle = 'rgba(0,0,0,0.7)';
-    _roundRect(ctx, barX - padX, barY - padY, barW + padX * 2, barH + padY * 2, 10);
+    _roundRect(ctx, barX - padX, barY - padY, barW + padX * 2, barH + padY * 2, 12);
     ctx.fill();
 
-    // Red opaque background bar
-    ctx.fillStyle = 'rgba(180,0,0,0.85)';
+    // Gradient background — #C80000 to #8C0000
+    const barGrad = ctx.createLinearGradient(barX, barY, barX + barW, barY);
+    barGrad.addColorStop(0, 'rgba(200,0,0,0.90)');
+    barGrad.addColorStop(0.5, 'rgba(180,0,0,0.95)');
+    barGrad.addColorStop(1, 'rgba(140,0,0,0.90)');
+    ctx.fillStyle = barGrad;
     _roundRect(ctx, barX, barY, barW, barH, 8);
     ctx.fill();
 
-    // Red border
-    ctx.strokeStyle = rgba(1, 0.1, 0.1, 0.9);
+    // Border with glow — wrapped in save/restore per spec rules
+    ctx.save();
+    ctx.shadowColor = '#FF0000';
+    ctx.shadowBlur = 20;
+    ctx.strokeStyle = 'rgba(255,60,60,0.9)';
     ctx.lineWidth = 2;
     _roundRect(ctx, barX, barY, barW, barH, 8);
     ctx.stroke();
+    ctx.restore();
 
-    // Warning text
-    ctx.font = 'bold 40px monospace';
+    // Pulsing alert icon circles (left and right)
+    const iconPulse = 0.5 + 0.5 * Math.sin(Date.now() * 0.012);
+    const iconR = 18 + iconPulse * 4;
+    const iconY = barY + barH / 2;
+    ctx.fillStyle = `rgba(255,238,16,${(0.7 + 0.3 * iconPulse).toFixed(2)})`;
+    ctx.beginPath();
+    ctx.arc(barX + 48, iconY, iconR, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(barX + barW - 48, iconY, iconR, 0, Math.PI * 2);
+    ctx.fill();
+    // Icon inner "!" symbol
+    ctx.font = `bold ${Math.round(20 + iconPulse * 4)}px monospace`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillStyle = rgba(1, 0.95, 0.1); // bright yellow
-    ctx.shadowColor = 'rgba(0,0,0,0.8)';
-    ctx.shadowBlur = 8;
+    ctx.fillStyle = 'rgba(180,0,0,0.9)';
+    ctx.fillText('!', barX + 48, iconY);
+    ctx.fillText('!', barX + barW - 48, iconY);
+
+    // Warning text — bold 48px #FFEE10 with glow blur 12 — wrapped in save/restore
+    ctx.save();
+    ctx.font = 'bold 48px monospace';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.shadowColor = '#FF0000';
+    ctx.shadowBlur = 12;
+    ctx.fillStyle = '#FFEE10';
     ctx.fillText('!! NUKE INCOMING !!', LOGICAL_W / 2, barY + barH / 2);
-    ctx.shadowBlur = 0;
+    ctx.restore();
 
     ctx.restore();
   }
 
   /**
-   * Default crosshair: light-gray lines + gap + corner brackets + center dot.
+   * Default crosshair: per-launcher-type color, corner brackets with corner squares, center dot with glow.
+   * SAM: steel blue #99BBCC. Truck: warm amber #CC9955. Others: light gray.
    * @param {CanvasRenderingContext2D} ctx
    * @param {number} mx
    * @param {number} my
+   * @param {object|null} sel — selected launcher (optional)
    */
-  _drawDefaultCrosshair(ctx, mx, my) {
-    const color = rgba(0.75, 0.8, 0.8, 0.85);
+  _drawDefaultCrosshair(ctx, mx, my, sel) {
+    // Per-launcher-type color
+    let color;
+    const type = sel && sel.type;
+    if (type === 'sam') {
+      color = '#99BBCC';
+    } else if (type === 'truck') {
+      color = '#CC9955';
+    } else {
+      color = 'rgba(192,204,204,0.85)';
+    }
+
     ctx.save();
     ctx.strokeStyle = color;
-    ctx.lineWidth = 1.5;
+    ctx.lineWidth = 1.8;
 
     // Horizontal arms
     _hline(ctx, mx - CROSSHAIR_GAP - CROSSHAIR_LINE_LEN, my, mx - CROSSHAIR_GAP, my);
@@ -625,45 +871,93 @@ export class UI {
     _vline(ctx, mx, my - CROSSHAIR_GAP - CROSSHAIR_LINE_LEN, mx, my - CROSSHAIR_GAP);
     _vline(ctx, mx, my + CROSSHAIR_GAP, mx, my + CROSSHAIR_GAP + CROSSHAIR_LINE_LEN);
 
-    // Corner brackets (four corners, each is an L-shape)
-    const d = CROSSHAIR_BRACKET_D;
-    const b = CROSSHAIR_BRACKET;
+    // Corner brackets (four corners, each is an L-shape) — 12px arm, 20px from center
+    const d = 20;
+    const b = 12;
     _bracket(ctx, mx - d, my - d,  b,  b); // top-left
     _bracket(ctx, mx + d, my - d, -b,  b); // top-right
     _bracket(ctx, mx - d, my + d,  b, -b); // bottom-left
     _bracket(ctx, mx + d, my + d, -b, -b); // bottom-right
 
-    // Center dot
+    // Corner 2x2 squares at bracket corners
     ctx.fillStyle = color;
+    const corners = [
+      [mx - d + b, my - d], [mx + d - b, my - d],
+      [mx - d + b, my + d], [mx + d - b, my + d],
+      [mx - d, my - d + b], [mx + d, my - d + b],
+      [mx - d, my + d - b], [mx + d, my + d - b],
+    ];
+    for (const [cx2, cy2] of corners) {
+      ctx.fillRect(cx2 - 1, cy2 - 1, 2, 2);
+    }
+
+    // Center dot r=3 white with glow blur 6
+    ctx.shadowColor = '#FFFFFF';
+    ctx.shadowBlur = 6;
+    ctx.fillStyle = '#FFFFFF';
     ctx.beginPath();
-    ctx.arc(mx, my, 2, 0, Math.PI * 2);
+    ctx.arc(mx, my, 3, 0, Math.PI * 2);
     ctx.fill();
+    ctx.shadowBlur = 0;
 
     ctx.restore();
   }
 
   /**
-   * Heat-seeker crosshair: red + lock circle around cursor.
+   * Heat-seeker crosshair: red arms, dashed outer circle, solid inner circle,
+   * 4 tick marks at N/S/E/W, slow rotation at 0.4 rad/s.
    * @param {CanvasRenderingContext2D} ctx
    * @param {number} mx
    * @param {number} my
    */
   _drawHeatCrosshair(ctx, mx, my) {
-    const color = rgba(0.95, 0.2, 0.15, 0.9);
+    const color = '#FF4422';
+    // Slow rotation: 0.4 rad/s
+    const rotation = (Date.now() * 0.0004) % (Math.PI * 2);
+
     ctx.save();
     ctx.strokeStyle = color;
-    ctx.lineWidth = 1.5;
+    ctx.lineWidth = 2;
 
-    // Arms (same shape as default)
+    // Arms (same gap/len as default)
     _hline(ctx, mx - CROSSHAIR_GAP - CROSSHAIR_LINE_LEN, my, mx - CROSSHAIR_GAP, my);
     _hline(ctx, mx + CROSSHAIR_GAP, my, mx + CROSSHAIR_GAP + CROSSHAIR_LINE_LEN, my);
     _vline(ctx, mx, my - CROSSHAIR_GAP - CROSSHAIR_LINE_LEN, mx, my - CROSSHAIR_GAP);
     _vline(ctx, mx, my + CROSSHAIR_GAP, mx, my + CROSSHAIR_GAP + CROSSHAIR_LINE_LEN);
 
-    // Lock circle
+    // Outer dashed circle (rotates)
+    ctx.save();
+    ctx.translate(mx, my);
+    ctx.rotate(rotation);
+    ctx.setLineDash([8, 6]);
     ctx.beginPath();
-    ctx.arc(mx, my, HEAT_LOCK_RADIUS, 0, Math.PI * 2);
+    ctx.arc(0, 0, HEAT_LOCK_RADIUS, 0, Math.PI * 2);
     ctx.stroke();
+    ctx.setLineDash([]);
+
+    // 4 tick marks at N/S/E/W on outer circle
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = color;
+    for (let t = 0; t < 4; t++) {
+      const angle = t * Math.PI / 2;
+      const cos = Math.cos(angle), sin = Math.sin(angle);
+      ctx.beginPath();
+      ctx.moveTo(cos * (HEAT_LOCK_RADIUS - 4), sin * (HEAT_LOCK_RADIUS - 4));
+      ctx.lineTo(cos * (HEAT_LOCK_RADIUS + 6), sin * (HEAT_LOCK_RADIUS + 6));
+      ctx.stroke();
+    }
+    ctx.restore();
+
+    // Inner solid circle (counter-rotates slightly)
+    ctx.save();
+    ctx.translate(mx, my);
+    ctx.rotate(-rotation * 0.5);
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(0, 0, HEAT_LOCK_RADIUS * 0.6, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
 
     // Center dot
     ctx.fillStyle = color;
@@ -722,6 +1016,15 @@ export class UI {
     const crosshairColorDim = rgba(cr, cg, cb, 0.38);
     /** Mid-alpha variant for dashed line */
     const crosshairColorMid = rgba(cr, cg, cb, 0.55);
+
+    // Full-screen flash at acquisition (first 0.15s)
+    if (this._lockTimer < 0.15) {
+      const flashA = 0.12 * (1 - this._lockTimer / 0.15);
+      ctx.save();
+      ctx.fillStyle = `rgba(255,255,255,${flashA.toFixed(3)})`;
+      ctx.fillRect(0, 0, LOGICAL_W, LOGICAL_H);
+      ctx.restore();
+    }
 
     ctx.save();
     ctx.strokeStyle = crosshairColor;
@@ -816,16 +1119,19 @@ export class UI {
     ctx.arc(tx, ty, outerR, 0, Math.PI * 2);
     ctx.stroke();
 
-    // Small tick marks at N/S/E/W on target ring for tactical feel
-    const tickLen = 6;
+    // 8 tick marks (cardinal 8px, diagonal 4px)
     const tickR = innerR + 2;
     ctx.strokeStyle = crosshairColor;
-    ctx.lineWidth = 2;
-    for (let a = 0; a < Math.PI * 2; a += Math.PI / 2) {
-      const cos = Math.cos(a), sin = Math.sin(a);
+    for (let ti = 0; ti < 8; ti++) {
+      const angle = ti * Math.PI / 4;
+      const isCardinal = ti % 2 === 0;
+      const tLen = isCardinal ? 8 : 4;
+      const tLW = isCardinal ? 2 : 1.5;
+      ctx.lineWidth = tLW;
+      const cos = Math.cos(angle), sin = Math.sin(angle);
       ctx.beginPath();
       ctx.moveTo(tx + cos * tickR, ty + sin * tickR);
-      ctx.lineTo(tx + cos * (tickR + tickLen), ty + sin * (tickR + tickLen));
+      ctx.lineTo(tx + cos * (tickR + tLen), ty + sin * (tickR + tLen));
       ctx.stroke();
     }
 
@@ -877,29 +1183,55 @@ export class UI {
   _drawGameOverOverlay(ctx, score) {
     ctx.save();
 
-    // Semi-transparent dark overlay
-    ctx.fillStyle = 'rgba(0,0,0,0.55)';
+    // Radial gradient overlay — darker center, lighter edges
+    const cx = LOGICAL_W / 2, cy = LOGICAL_H / 2;
+    const radGrad = ctx.createRadialGradient(cx, cy, 0, cx, cy, Math.max(LOGICAL_W, LOGICAL_H) * 0.7);
+    radGrad.addColorStop(0, 'rgba(0,0,0,0.72)');
+    radGrad.addColorStop(0.5, 'rgba(0,0,0,0.55)');
+    radGrad.addColorStop(1, 'rgba(0,0,0,0.38)');
+    ctx.fillStyle = radGrad;
     ctx.fillRect(0, 0, LOGICAL_W, LOGICAL_H);
 
-    // "GAME OVER"
-    ctx.font = 'bold 120px monospace';
-    ctx.fillStyle = rgba(1, 0.15, 0.12);
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.shadowColor = 'rgba(0,0,0,0.8)';
-    ctx.shadowBlur = 24;
-    ctx.fillText('GAME OVER', LOGICAL_W / 2, LOGICAL_H / 2 - 80);
+    const textY = LOGICAL_H / 2 - 80;
+
+    // "GAME OVER" — triple-pass (glow blur 60, main, crack highlight)
+    ctx.font = 'bold 144px monospace';
+
+    // Pass 1: glow blur 60
+    ctx.shadowColor = '#FF1A10';
+    ctx.shadowBlur = 60;
+    ctx.fillStyle = 'rgba(255,26,16,0.6)';
+    ctx.fillText('GAME OVER', cx, textY);
+
+    // Pass 2: main solid text
+    ctx.shadowBlur = 8;
+    ctx.fillStyle = '#FF1A10';
+    ctx.fillText('GAME OVER', cx, textY);
     ctx.shadowBlur = 0;
 
-    // Final score
-    ctx.font = 'bold 56px monospace';
-    ctx.fillStyle = rgba(1, 0.9, 0.7);
-    ctx.fillText(`Final Score: ${score}`, LOGICAL_W / 2, LOGICAL_H / 2 + 50);
+    // Pass 3: crack highlight at offset (2,-2) semi-transparent white
+    ctx.globalAlpha = 0.18;
+    ctx.fillStyle = '#FFFFFF';
+    ctx.fillText('GAME OVER', cx + 2, textY - 2);
+    ctx.globalAlpha = 1;
+
+    // "FINAL SCORE" label — 28px #AAAAAA above score
+    ctx.font = '28px monospace';
+    ctx.fillStyle = '#AAAAAA';
+    ctx.fillText('FINAL SCORE', cx, LOGICAL_H / 2 + 20);
+
+    // Score value — 64px #FFD700
+    ctx.font = 'bold 64px monospace';
+    ctx.fillStyle = '#FFD700';
+    ctx.fillText(String(score), cx, LOGICAL_H / 2 + 90);
 
     // Play again hint
+    const blinkA = 0.5 + 0.5 * Math.sin(Date.now() * 0.002);
     ctx.font = '34px monospace';
-    ctx.fillStyle = rgba(0.7, 0.75, 0.8, 0.7);
-    ctx.fillText('Click to play again', LOGICAL_W / 2, LOGICAL_H / 2 + 150);
+    ctx.fillStyle = `rgba(180,192,204,${blinkA.toFixed(2)})`;
+    ctx.fillText('Click to play again', cx, LOGICAL_H / 2 + 185);
 
     ctx.restore();
   }

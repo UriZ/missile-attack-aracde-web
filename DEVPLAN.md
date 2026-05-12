@@ -1,125 +1,148 @@
 # Missile Attack Arcade — Development Plan
 
-## Feature Backlog
+Legend: ~~Strikethrough~~ = Done | **Bold** = In Progress/QA | Normal = Planned
 
 ---
 
-### 1. Launcher Legend / HUD Overhaul
-**Status:** Planned
-
-- Replace the current launcher HUD panels with a clear, readable sidebar on the left
-- Each launcher entry should show:
-  - Large vehicle icon / type label (SAM, TRUCK, SEEKER)
-  - Color-coded health indicator or "destroyed" state
-  - Keyboard shortcut hint (1, 2, 3, 4)
-  - Clear SELECTED state — bright highlight border, larger
-- Make it obvious which launcher is active at a glance
-
-**Files:** `main.gd` (`build_launcher_hud`, `update_launcher_hud`), `main.tscn` (LauncherHUD node layout)
+### ~~1. Launcher Legend / HUD Overhaul~~ ✅
+> Part of UI overhaul (#19). Score panel, launcher cards with key badges, heat bar, per-launcher crosshair colors — all implemented.
 
 ---
 
-### 3. Enemy Missile & Heat-Seeker Tuning
-**Status:** Planned
-
-- Enemy missiles: reduce speed (spawn `launch_time` range from `3.5–5.5s` → `5.0–7.5s`)
-- Heat-seeking missiles: increase tracking speed (`tracking_speed` from `3.0` → `5.5`) and increase base velocity slightly
-- Heat-seeker gravity: reduce from `50` → `30` so it stays on target better at angles
-- Goal: make intercepting with heat-seekers feel rewarding, while giving player more reaction time against enemy missiles
-- acquiring a target with heat seeking should be more dramatic and fun - the cursor should change colors drastically on lock acquisition
-- play a "target acquired" audio cue (procedural synth beep/tone) when heat-seeker locks on — replace the old "pickle is hot" MP3 approach
-- remove pickle-hot.mp3 dependency; use procedural audio for the lock-on sound
-
-
-**Files:** `heat_seeking_missile.gd`, `main.gd` (`spawn_enemy_missile`)
+### ~~3. Enemy Missile & Heat-Seeker Tuning~~ ✅
+> Done (#12, #17). Speed tuning, heat-seeker tracking, dramatic cursor on lock, target-acquired sound (procedural synth), radio chatter.
 
 ---
 
-### 4. Enemy Drones
-**Status:** ✅ Done
-
-- Slow-moving aerial units that fly horizontally across the screen
-- Different threat profile from missiles: constant direction, lower altitude, harder to intercept with SAM
-- Visual: small angular drone silhouette (polygon art)
-- Behavior: fly in from left or right edge, bomb launchers if they pass over them
-- Can be intercepted by any launcher type
-- Score: lower than missile (simpler threat)
-
-**New files:** `drone.gd`, `drone.tscn`
-**Modified files:** `main.gd` (spawn logic, wave system)
+### ~~4. Enemy Drones~~ ✅
+> Horizontal-flying drones with bomb drops. Suicide drone variant also implemented.
 
 ---
 
-### 5. Enemy Nukes
-**Status:** Planned — design phase
-
-- Rare, devastating weapon — requires multiple hits or a direct heat-seeker lock to intercept
-- Visual: large warhead with distinctive shape (wider body, different color scheme)
-- Impact: much larger blast radius than super missile, destroys all nearby launchers
-- Behavior: slow descent, ballistic — gives player time to respond but demands priority
-- Audio: distinct warning sound on spawn
-- May require a dedicated "nuke incoming" UI alert
-
-**New files:** `nuke.gd`, `nuke.tscn`
-**Modified files:** `main.gd` (spawn logic, wave system), `explosion.gd` or new `nuke_explosion.tscn`
-
-
-### 6. vulkan cannon
-**Status:** ✅ Done
-- Multi-barrel rapid-fire cannon (hold to fire, ~14 rounds/sec)
-- Overheat system: heat builds per shot, locks out at 100%, recovers at 30%
-- Visual: 3 barrels with rotating barrel group, heat glow overlay, ammo boxes
-- HUD: heat bar in top-left, overheat warning label
-- Tracer bullets: fast (1800px/s), small explosions on hit, no terrain damage
+### ~~5. Enemy Nukes~~ ✅
+> Done (#1, #2, #21). Fat Man bezier body, radiation-green palette, rotating trefoil, mushroom cloud (7-layer), nuke warning UI + siren. Visual redesign in QA (#21).
 
 ---
 
-### 7 ui fixes launchers and missiles
-- add wheels to the truck, and chains (lime in a tank) to the sam launcher
-- when blsting the mega missiles, i want to see a mega blast
-- when choosing a launcher, the crosshair should chaange to something hinting on selection
+### ~~6. Vulkan Cannon~~ ✅
+> Done (#11, #19). Redesigned as M134 rotary cannon — 6 spinning barrels in octagonal shroud, pedestal mount, ammo feed box, 3-stage heat glow, shell casings. In QA (#19).
 
+---
 
-### 8 terrain improvements
-**Status:** ✅ Done
-add improvements to the terrain - add bridges, soldiers, civilian buildings , industry buildings . randomly generate them at the beginning 
-### 8.1 terrain improvemetns advanced
-- add bigger mountains, canions , vallies, revers... more dramamtic landscape
-- add weather scenery - ie. snow, or sun and desert
+### ~~7. UI Fixes — Launchers and Missiles~~ ✅
+> Part of UI overhaul (#19). Launcher gradients, metallic missile bodies, crosshair changes per weapon, mega explosions (5-layer fireball, double shockwave). In QA.
 
-### 9 wave
-**Status:** ✅ Done
-- have attack waves of the incoming missiles... generate them, repeat etc
+---
 
-### 10 add sound for outgoing missiles
-**Status:** ✅ Done
-- add sounds for outgoing missiles
-- add sound for vulkan 
+### ~~8. Terrain Improvements~~ ✅
+> Done. Ground/grass gradients, mountains with snow caps, atmospheric haze, building windows with lit/unlit variation.
 
-### 11 mega missile split 
-- create a new type of mega missle. when its hit, it splits into multiple smaller fragments than can cause damage and need to be shot down 
+---
 
-### ui overhaul ##
-- improve the design of all the elements. it should be amazing and appealing and more realistic
+### 8.1 Terrain Improvements Advanced
+**Status:** Planned | **GitHub:** #16 (architect)
 
+- Bigger mountains, canyons, valleys, rivers — more dramatic landscape
+- Weather/scenery — snow, desert, day/night cycle
+- Dynamic scenery/daytime system
 
-### startup 
-- fix cover image - play button shouldbe nicer and in center
-- add music
+---
 
+### ~~9. Waves~~ ✅
+> Done (#10). Randomized wave composition with budget system, difficulty scaling.
 
-## Already Done
+---
 
-- [x] Missiles launching and moving
-- [x] Enemy missiles
-- [x] Collision / interception
-- [x] Defensive structures (SAM, Truck, Heat-Seeker)
-- [x] Wave system (timer-based spawning)
-- [x] Start screen + play/restart flow
-- [x] Super missiles with parachutes
-- [x] Procedural explosion sounds
-- [x] Deformable terrain
-- [x] Screen shake
-- [x] Launcher selection HUD (basic)
-- [x] Crosshair always visible during gameplay; reactive for heat-seeker (default/heat/locked modes)
-- [x] Vulkan cannon with overheat mechanic
+### ~~10. Outgoing Missile Sounds~~ ✅
+> Done. Procedural launch sounds for all launcher types.
+
+---
+
+### ~~11. Super Missile Split~~ ✅
+> Done (#20). Super missile splits into 4 tumbling MissileFragment entities on intercept. Parachute redesigned with 9-layer canopy. In QA (#20).
+
+---
+
+### **12. UI Overhaul** 🔄
+**Status:** In QA | **GitHub:** #19
+
+- Score panel, launcher cards, heat bar, wave banner, nuke warning banner
+- Per-launcher crosshair colors (SAM steel blue, Truck amber, etc.)
+- Explosion 5-layer fireball with blue-white core, double shockwave
+- Terrain gradients, building windows
+- Vulkan cannon M134 redesign
+- All entity visuals upgraded (drone, enemy missile, launchers, missiles)
+- **Awaiting user approval** — user was not satisfied with first pass
+
+---
+
+### 13. Startup Screen
+**Status:** Partially done | **GitHub:** None
+
+- ~~Start screen: vertical gradient, scanline overlay, glowing title, pulsing CTA~~ ✅
+- ~~Game over: radial gradient overlay, triple-pass text~~ ✅
+- Music: **Not started**
+
+---
+
+### **14. Paratroopers** 🔄
+**Status:** In QA | **GitHub:** #24
+
+- Transport plane flies horizontally, drops paratrooper soldiers
+- Paratroopers freefall 0.3s then deploy green camo parachute
+- Landing near a launcher (120px) destroys it
+- Can be intercepted mid-air (2 points)
+- Transport plane shootable (3 points, mega explosion)
+- Spawns from wave 4+, costs 5 budget
+
+---
+
+### 15. Soldiers
+**Status:** Planned | **GitHub:** None
+
+- Soldiers come out of military barracks and operate turrets
+- Not yet designed or implemented
+
+---
+
+### 16. Upgrade Weapons
+**Status:** Planned | **GitHub:** None
+
+- Points → cash conversion system
+- Spend cash to upgrade: better scopes, better missiles, longer Vulkan duration, etc.
+- Shop/upgrade UI needed
+- Not yet designed or implemented
+
+---
+
+### 17. Fix QA Agent
+**Status:** Planned | **GitHub:** None
+
+- QA agent should have a reusable Puppeteer screenshot skill instead of writing a new script each time
+- Workflow improvement, not a game feature
+
+---
+
+## Open Bugs
+
+| # | Title | Status |
+|---|-------|--------|
+| #22 | Wave number duplicates during banner | Fixed, in QA |
+| #23 | Heat-seeker lock circle too small | Fixed, in QA |
+
+---
+
+## GitHub Issue Tracker
+
+| # | Title | State | Labels |
+|---|-------|-------|--------|
+| #24 | Paratroopers | open | qa |
+| #23 | Lock circle too small | open | bug, qa |
+| #22 | Wave number duplicate | open | bug, qa |
+| #21 | Nuke visual redesign | open | qa |
+| #20 | Super missile split + parachute | open | qa |
+| #19 | UI Overhaul | open | qa |
+| #17 | Target acquired sound + cursor | open | enhancement |
+| #16 | Dynamic scenery/daytime | open | architect |
+| #14 | Radio chatter | open | qa |
+| #12 | Heat-seeker tuning | open | qa |

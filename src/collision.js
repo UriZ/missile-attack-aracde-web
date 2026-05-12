@@ -16,6 +16,7 @@
 import { Explosion } from './explosion.js';
 import { MushroomCloud } from './entities/mushroom-cloud.js';
 import { Crater } from './crater.js';
+import { MissileFragment } from './entities/missile-fragment.js';
 
 // ------------------------------------------------------------------
 // Type guards — checked by constructor name so no import cycles are
@@ -36,6 +37,15 @@ function isNuke(e) { return e.constructor.name === 'Nuke'; }
 
 /** @param {import('./entities/entity.js').Entity} e */
 function isHeatSeekingMissile(e) { return e.constructor.name === 'HeatSeekingMissile'; }
+
+/** @param {import('./entities/entity.js').Entity} e */
+function isMissileFragment(e) { return e.constructor.name === 'MissileFragment'; }
+
+/** @param {import('./entities/entity.js').Entity} e */
+function isTransportPlane(e) { return e.constructor.name === 'TransportPlane'; }
+
+/** @param {import('./entities/entity.js').Entity} e */
+function isParatrooper(e) { return e.constructor.name === 'Paratrooper'; }
 
 // ------------------------------------------------------------------
 // Geometry helpers
@@ -160,6 +170,45 @@ export class CollisionSystem {
             game.onEnemyDestroyed('nuke');
             game.shakeScreen(20);
           }
+        } else if (isSuperMissile(enemy)) {
+          // SuperMissile splits into fragments instead of being destroyed.
+          // Collect fragment data first (before destroy clears nothing, but cleaner semantics).
+          const fragData = enemy.getFragments();
+
+          hit.add(proj);
+          hit.add(enemy);
+          proj.destroy();
+          enemy.destroy();
+
+          // Standard explosion at midpoint as visual feedback
+          spawnExplosion(entityManager, game, mx, my, false);
+          game.shakeScreen(12);
+
+          // Spawn fragments — inherit a fraction of the SuperMissile's velocity
+          for (const fd of fragData) {
+            entityManager.add(new MissileFragment(fd.x, fd.y, fd.vx, fd.vy));
+          }
+
+          // No score for the split itself — score comes from killing each fragment
+        } else if (isTransportPlane(enemy)) {
+          // Transport plane — mega explosion, stop further drops.
+          hit.add(proj);
+          hit.add(enemy);
+          proj.destroy();
+          enemy.destroy();
+
+          spawnExplosion(entityManager, game, enemy.x, enemy.y, true);
+          game.onEnemyDestroyed('transport_plane');
+          game.shakeScreen(15);
+        } else if (isParatrooper(enemy)) {
+          // Paratrooper intercepted mid-air — 2 points.
+          hit.add(proj);
+          hit.add(enemy);
+          proj.destroy();
+          enemy.destroy();
+
+          spawnExplosion(entityManager, game, mx, my, false);
+          game.onEnemyDestroyed('paratrooper');
         } else {
           // Standard intercept — both consumed.
           hit.add(proj);
@@ -181,6 +230,8 @@ export class CollisionSystem {
     // ── 2. Enemy projectiles vs terrain ──────────────────────────────
     for (const enemy of enemies) {
       if (hit.has(enemy)) continue;
+      // Transport planes fly at high altitude — skip terrain collision
+      if (isTransportPlane(enemy)) continue;
       if (!collidesWithTerrain(enemy, terrain)) continue;
 
       hit.add(enemy);
@@ -191,7 +242,32 @@ export class CollisionSystem {
       // which may have already passed below the surface by up to one frame.
       const ey = terrain.getHeightAt(ex);
 
-      if (isNuke(enemy)) {
+      if (isParatrooper(enemy)) {
+        // Paratrooper landed — check for nearby launcher to destroy
+        let destroyedLauncher = false;
+        const LANDING_DAMAGE_RADIUS = 120;
+        for (const launcher of launchers) {
+          if (hit.has(launcher)) continue;
+          const dx = launcher.x - ex;
+          const dy = launcher.y - ey;
+          if (dx * dx + dy * dy < LANDING_DAMAGE_RADIUS * LANDING_DAMAGE_RADIUS) {
+            hit.add(launcher);
+            launcher.destroy();
+            spawnExplosion(entityManager, game, launcher.x, launcher.y, true);
+            terrain.damage(launcher.x, launcher.y, 60, 22);
+            spawnCrater(entityManager, launcher.x, terrain.getHeightAt(launcher.x), 2);
+            destroyedLauncher = true;
+            break; // one trooper destroys one launcher
+          }
+        }
+        if (!destroyedLauncher) {
+          // Small explosion on empty ground
+          spawnExplosion(entityManager, game, ex, ey, false);
+          terrain.damage(ex, ey, 30, 12);
+          spawnCrater(entityManager, ex, ey, 1);
+        }
+        game.shakeScreen(destroyedLauncher ? 20 : 5);
+      } else if (isNuke(enemy)) {
         // Five mega explosions in a spread pattern.
         spawnExplosion(entityManager, game, ex,       ey,      true);
         spawnExplosion(entityManager, game, ex - 80,  ey,      true);
@@ -269,6 +345,9 @@ export class CollisionSystem {
           spawnExplosion(entityManager, game, ix + 60, iy, true);
           spawnExplosion(entityManager, game, ix - 30, iy - 20, true);
           spawnExplosion(entityManager, game, ix + 30, iy - 20, true);
+
+          // Mushroom cloud rising from impact point (same as terrain impact)
+          entityManager.add(new MushroomCloud(ix, craterY));
 
           terrain.damage(ix,      iy, 200, 70);
           terrain.damage(ix - 80, iy, 150, 55);

@@ -1,64 +1,27 @@
 /**
- * Vulkan Cannon — GE M134 Minigun style (T2: Judgment Day aesthetic).
- * Heavy chrome gatling gun with 6 rotating barrels, brass ammo belt,
- * muzzle flash, ejecting shells, heat glow, and smoke effects.
+ * Vulkan Cannon — GE M134 Rotary Cannon (M134 Minigun aesthetic).
+ * Heavy industrial mount with 6 rotating barrels inside an octagonal shroud,
+ * OD green ammo feed box, brass belt chute, muzzle brake crown,
+ * 3-stage heat glow, and procedural muzzle flash / shell casings / smoke.
  */
 
 import { Launcher, drawPoly } from './launcher.js';
 import { TAU, rgba, lerp, clamp, randf } from '../utils.js';
 
 // ══════════════════════════════════════════════════════════════════
-// Geometry data — heavy industrial minigun proportions
+// Geometry data — M134 heavy pedestal proportions
 // ══════════════════════════════════════════════════════════════════
 
-// Base mount — heavy tripod/pedestal with ammo box
-const BASE_POLYS = [
-  // Heavy mount platform
-  { c: rgba(0.18, 0.18, 0.22), pts: [-38, 20, -34, 26, -20, 28, 0, 29, 20, 28, 34, 26, 38, 20, 38, 10, -38, 10] },
-  // Mount body — brushed steel
-  { c: rgba(0.3, 0.3, 0.35), pts: [-32, 16, -28, 20, -16, 22, 0, 23, 16, 22, 28, 20, 32, 16, 32, 8, -32, 8] },
-  // Pivot ring — chrome
-  { c: rgba(0.5, 0.5, 0.55), pts: [-20, 12, -16, 14, -8, 15, 0, 15, 8, 15, 16, 14, 20, 12, 20, 9, -20, 9] },
-  // Ammo box left — OD green
-  { c: rgba(0.2, 0.28, 0.15), pts: [-36, 10, -22, 10, -20, 0, -18, -10, -36, -10, -38, 0] },
-  // Ammo box lid hinge
-  { c: rgba(0.15, 0.15, 0.18), pts: [-36, 0, -22, 0, -22, -2, -36, -2] },
-  // Ammo belt feed (brass links)
-  { c: rgba(0.7, 0.55, 0.15), pts: [-20, 6, -14, 6, -12, 2, -14, -2, -20, -2, -22, 2] },
-  // Belt links detail
-  { c: rgba(0.8, 0.65, 0.2), pts: [-19, 5, -15, 5, -15, 3, -19, 3] },
-  // Ammo box right
-  { c: rgba(0.2, 0.28, 0.15), pts: [22, 10, 36, 10, 38, 0, 36, -10, 18, -10, 20, 0] },
-  // Ammo box lid hinge right
-  { c: rgba(0.15, 0.15, 0.18), pts: [22, 0, 36, 0, 36, -2, 22, -2] },
-];
-
-// Turret housing — rotating cylinder
-const TURRET_POLYS = [
-  // Main housing — dark steel cylinder
-  { c: rgba(0.25, 0.25, 0.3), pts: [-14, 4, -16, 0, -16, -8, -14, -12, 14, -12, 16, -8, 16, 0, 14, 4] },
-  // Motor housing bulge — where the electric motor sits
-  { c: rgba(0.22, 0.22, 0.28), pts: [-12, -4, -13, -8, -13, -14, -11, -16, 11, -16, 13, -14, 13, -8, 12, -4] },
-  // Rear bearing cap
-  { c: rgba(0.4, 0.4, 0.45), pts: [-10, 4, 10, 4, 10, 6, -10, 6] },
-];
-
-// Barrel cluster — 6 barrels arranged in a circle
+// Barrel cluster constants
 const NUM_BARRELS = 6;
-const BARREL_CIRCLE_RADIUS = 8;  // distance from center to each barrel
-const BARREL_LENGTH = 32;        // how long each barrel extends
-const BARREL_WIDTH = 2.5;        // half-width of each barrel
+const BARREL_CIRCLE_RADIUS = 8;   // radius from spin axis to each barrel center
+const BARREL_HALF_W = 3;          // half-width of each barrel tube
+const BARREL_LENGTH = 22;         // half-length from cluster center to muzzle
 
-// Barrel clamp rings (decorative) — positions along barrel length
-const CLAMP_POSITIONS = [0.25, 0.55, 0.85];
-
-// SpinHub — front bearing
-const SPIN_HUB_OUTER = [-8, 5, -5, 8, 5, 8, 8, 5, 8, -3, 5, -6, -5, -6, -8, -3];
-const SPIN_HUB_INNER = [-5, 3, -3, 5, 3, 5, 5, 3, 5, -1, 3, -3, -3, -3, -5, -1];
 
 // Selection glow polys
-const GLOW1 = [-44, 28, 44, 28, 38, 22, -38, 22];
-const GLOW2 = [-48, 32, 48, 32, 42, 25, -42, 25];
+const GLOW1 = [-44, 34, 44, 34, 38, 26, -38, 26];
+const GLOW2 = [-48, 38, 48, 38, 42, 29, -42, 29];
 
 // Shell casing particle pool
 const MAX_SHELLS = 12;
@@ -226,88 +189,146 @@ export class VulkanCannon extends Launcher {
     ctx.save();
     ctx.translate(this.x, this.y);
 
-    // Selection glow
+    // ── 1. Selection glow ────────────────────────────────────────
     if (this.isSelected) {
-      drawPoly(ctx, GLOW2, `rgba(102,153,255,${(this._glowAlpha * 0.43).toFixed(3)})`);
-      drawPoly(ctx, GLOW1, `rgba(77,128,255,${this._glowAlpha.toFixed(3)})`);
+      ctx.save();
+      ctx.shadowColor = '#5060FF';
+      ctx.shadowBlur = 18;
+      drawPoly(ctx, GLOW2, `rgba(80,110,255,${(this._glowAlpha * 0.28).toFixed(3)})`);
+      drawPoly(ctx, GLOW1, `rgba(80,110,255,${(this._glowAlpha * 0.55).toFixed(3)})`);
+      ctx.restore();
     }
 
-    // Base polygons
-    for (const p of BASE_POLYS) {
-      drawPoly(ctx, p.pts, p.c);
+    // ── 2. Base pedestal (non-rotating) ─────────────────────────
+    // Foot plate
+    drawPoly(ctx, [-42, 32, 42, 32, 36, 24, -36, 24], '#1A1C1E');
+
+    // Body column — gradient
+    const colGrad = ctx.createLinearGradient(-22, 0, 22, 0);
+    colGrad.addColorStop(0, '#3A3C42');
+    colGrad.addColorStop(1, '#22242A');
+    ctx.beginPath();
+    ctx.moveTo(-22, 24); ctx.lineTo(22, 24);
+    ctx.lineTo(18, 2);   ctx.lineTo(-18, 2);
+    ctx.closePath();
+    ctx.fillStyle = colGrad;
+    ctx.fill();
+
+    // Trunnion crossbar
+    const trGrad = ctx.createLinearGradient(0, -2, 0, 6);
+    trGrad.addColorStop(0, '#4A4C54');
+    trGrad.addColorStop(0.4, '#5A5C64');
+    trGrad.addColorStop(1, '#32343C');
+    ctx.beginPath();
+    ctx.rect(-32, -2, 64, 8);
+    ctx.fillStyle = trGrad;
+    ctx.fill();
+
+    // Trunnion arms extending up to gun housing (y = -18)
+    ctx.fillStyle = '#2C2E36';
+    ctx.fillRect(-30, -18, 8, 16);
+    ctx.fillRect(22, -18, 8, 16);
+
+    // Mounting bolts on foot plate (4 bolts)
+    for (const bx of [-30, -18, 18, 30]) {
+      ctx.beginPath();
+      ctx.arc(bx, 28, 2.5, 0, TAU);
+      ctx.fillStyle = '#5A5C64';
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(bx, 28, 1.2, 0, TAU);
+      ctx.fillStyle = '#222428';
+      ctx.fill();
     }
 
-    // Turret (rotated)
+    // ── 3. Ammo feed box (non-rotating, left side) ───────────────
+    drawPoly(ctx, [-54, 2, -28, 2, -26, -14, -46, -18, -54, -10], '#2E3A1E');
+    // Box highlight edge
+    drawPoly(ctx, [-54, 2, -28, 2, -28, 0, -54, 0], 'rgba(255,255,255,0.06)');
+    // Shadow edge
+    drawPoly(ctx, [-46, -18, -54, -10, -54, -8, -47, -16], 'rgba(0,0,0,0.22)');
+
+    // Belt chute — 3 brass hex segments
+    for (let seg = 0; seg < 3; seg++) {
+      const bcy = -2 + seg * -5;
+      const bcx = -28 + seg * 3;
+      drawPoly(ctx, [
+        bcx - 4, bcy,
+        bcx,     bcy - 2,
+        bcx + 4, bcy,
+        bcx + 4, bcy - 4,
+        bcx,     bcy - 6,
+        bcx - 4, bcy - 4,
+      ], seg % 2 === 0 ? '#C8A030' : '#B89028');
+    }
+
+    // ── 4. Gun body (rotates with turret) ────────────────────────
     ctx.save();
     ctx.rotate(this.turretRotation);
 
-    for (const p of TURRET_POLYS) {
-      drawPoly(ctx, p.pts, p.c);
-    }
+    // 4a. Receiver block (y = 0 to y = -8)
+    ctx.fillStyle = '#2A2C32';
+    ctx.fillRect(-16, -8, 34, 8);
+    // Belt feed port (left)
+    ctx.fillStyle = '#141618';
+    ctx.fillRect(-18, -3, 5, 5);
+    // Ejection port (right) — glows with heat
+    const ejectR = Math.min(1, this.heat * 2.5);
+    ctx.fillStyle = `rgb(${Math.round(20 + ejectR * 60)},${Math.round(20 + ejectR * 10)},20)`;
+    ctx.fillRect(13, -4, 6, 5);
 
-    // Main barrel housing — long cylinder, changes color with heat
-    const housingColor = this._getHousingColor();
+    // 4b. Motor housing (y = -8 to y = -20) — wider bulge with cooling fins
+    const motorGrad = ctx.createLinearGradient(-14, 0, 14, 0);
+    motorGrad.addColorStop(0, '#222428');
+    motorGrad.addColorStop(1, '#2E3036');
     ctx.beginPath();
-    ctx.moveTo(-10, -10);
-    ctx.lineTo(-11, -14);
-    ctx.lineTo(-11, -46);
-    ctx.lineTo(-10, -48);
-    ctx.lineTo(10, -48);
-    ctx.lineTo(11, -46);
-    ctx.lineTo(11, -14);
-    ctx.lineTo(10, -10);
+    ctx.moveTo(-14, -8); ctx.lineTo(-16, -12);
+    ctx.lineTo(-16, -20); ctx.lineTo(16, -20);
+    ctx.lineTo(16, -12); ctx.lineTo(14, -8);
     ctx.closePath();
-    ctx.fillStyle = housingColor;
+    ctx.fillStyle = motorGrad;
     ctx.fill();
 
-    // Housing highlight stripe (chrome reflection)
-    ctx.beginPath();
-    ctx.rect(-2, -14, 4, -34);
-    ctx.fillStyle = `rgba(255, 255, 255, ${(0.08 + this.heat * 0.04).toFixed(3)})`;
-    ctx.fill();
+    // Cooling fins
+    ctx.fillStyle = 'rgba(0,0,0,0.3)';
+    for (const fy of [-11, -14, -17]) {
+      ctx.fillRect(-15, fy - 0.5, 30, 1.5);
+    }
+    ctx.fillStyle = 'rgba(255,255,255,0.08)';
+    for (const fy of [-11, -14, -17]) {
+      ctx.fillRect(-15, fy - 0.5, 30, 0.7);
+    }
 
-    // Clamp rings on housing
-    for (const pos of CLAMP_POSITIONS) {
-      const cy = -14 + (-34 * pos);
+    // Motor access panel
+    ctx.fillStyle = '#1E2028';
+    ctx.fillRect(4, -18, 10, 7);
+    for (const sx of [6, 12]) {
       ctx.beginPath();
-      ctx.rect(-12, cy - 1.5, 24, 3);
-      ctx.fillStyle = rgba(0.2, 0.2, 0.25);
-      ctx.fill();
-      // Chrome edge
-      ctx.beginPath();
-      ctx.rect(-12, cy - 1.5, 24, 1);
-      ctx.fillStyle = `rgba(180, 180, 200, 0.3)`;
+      ctx.arc(sx, -15, 1.2, 0, TAU);
+      ctx.fillStyle = '#3A3C44';
       ctx.fill();
     }
 
-    // Muzzle brake / flash hider
-    const muzzleColor = this._getMuzzleColor();
-    ctx.beginPath();
-    ctx.moveTo(-13, -46);
-    ctx.lineTo(-14, -48);
-    ctx.lineTo(-14, -52);
-    ctx.lineTo(-12, -54);
-    ctx.lineTo(12, -54);
-    ctx.lineTo(14, -52);
-    ctx.lineTo(14, -48);
-    ctx.lineTo(13, -46);
-    ctx.closePath();
-    ctx.fillStyle = muzzleColor;
-    ctx.fill();
-
-    // Flash hider slots
-    ctx.fillStyle = rgba(0.1, 0.1, 0.12);
-    for (let i = -2; i <= 2; i++) {
-      ctx.fillRect(i * 5 - 1, -48, 2, -5);
+    // 4c. Dark interior cavity — visible background behind spinning barrels
+    {
+      const cavityGrad = ctx.createRadialGradient(0, -40, 0, 0, -40, 14);
+      cavityGrad.addColorStop(0, '#0D0E11');
+      cavityGrad.addColorStop(1, '#16181D');
+      ctx.beginPath();
+      ctx.moveTo(-13, -21);
+      ctx.lineTo(13, -21);
+      ctx.lineTo(13, -59);
+      ctx.lineTo(-13, -59);
+      ctx.closePath();
+      ctx.fillStyle = cavityGrad;
+      ctx.fill();
     }
 
-    // BarrelGroup — positioned at muzzle, rotates with barrel spin
+    // 4d. Spinning barrel cluster (center at y = -40) — drawn BEFORE shroud walls
     ctx.save();
-    ctx.translate(0, -50);
+    ctx.translate(0, -40);
     ctx.rotate(this.barrelSpin * Math.PI / 180);
 
-    // Draw 6 barrels in a circle
-    const tipColor = this._getTipColor();
     for (let i = 0; i < NUM_BARRELS; i++) {
       const angle = (TAU / NUM_BARRELS) * i;
       const bx = Math.cos(angle) * BARREL_CIRCLE_RADIUS;
@@ -316,80 +337,285 @@ export class VulkanCannon extends Launcher {
       ctx.save();
       ctx.translate(bx, by);
 
-      // Barrel body
-      ctx.beginPath();
-      ctx.rect(-BARREL_WIDTH, -BARREL_LENGTH, BARREL_WIDTH * 2, BARREL_LENGTH);
-      ctx.fillStyle = tipColor;
-      ctx.fill();
+      // High-contrast L-R gradient for roundness illusion
+      const barrelGrad = ctx.createLinearGradient(-BARREL_HALF_W, 0, BARREL_HALF_W, 0);
+      barrelGrad.addColorStop(0,    '#B0B4BE');
+      barrelGrad.addColorStop(0.35, '#8A8E98');
+      barrelGrad.addColorStop(0.7,  '#5A5E68');
+      barrelGrad.addColorStop(1,    '#303238');
+      ctx.fillStyle = barrelGrad;
+      ctx.fillRect(-BARREL_HALF_W, -BARREL_LENGTH, BARREL_HALF_W * 2, BARREL_LENGTH * 2);
 
-      // Barrel bore (dark center)
+      // Bore hole at muzzle end
       ctx.beginPath();
-      ctx.arc(0, -BARREL_LENGTH, BARREL_WIDTH * 0.6, 0, TAU);
-      ctx.fillStyle = rgba(0.05, 0.05, 0.05);
-      ctx.fill();
-
-      // Chrome edge highlight
-      ctx.beginPath();
-      ctx.rect(-BARREL_WIDTH, -BARREL_LENGTH, 1, BARREL_LENGTH);
-      ctx.fillStyle = `rgba(200, 200, 220, 0.15)`;
+      ctx.arc(0, -BARREL_LENGTH, 2, 0, TAU);
+      ctx.fillStyle = '#050507';
       ctx.fill();
 
       ctx.restore();
     }
 
-    // Front spin hub (bearing plate)
-    drawPoly(ctx, SPIN_HUB_OUTER, rgba(0.3, 0.3, 0.35));
-    drawPoly(ctx, SPIN_HUB_INNER, rgba(0.45, 0.45, 0.5));
-    // Center bolt
+    // Center hub (spins with barrels)
     ctx.beginPath();
-    ctx.arc(0, 0, 3, 0, TAU);
-    ctx.fillStyle = rgba(0.55, 0.55, 0.6);
+    ctx.arc(0, 0, 8, 0, TAU);
+    ctx.fillStyle = '#1A1C22';
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(0, 0, 5, 0, TAU);
+    ctx.fillStyle = '#2A2C36';
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(0, 0, 2, 0, TAU);
+    ctx.fillStyle = '#6070A0';
     ctx.fill();
 
-    ctx.restore(); // barrel group
+    ctx.restore(); // barrel spin
 
-    // === Muzzle flash === (drawn after barrels, before restore)
+    // 4e. Shroud walls — LEFT and RIGHT strips only (not solid fill, so barrels show)
+    // Left wall
+    {
+      const lwGrad = ctx.createLinearGradient(-16, 0, -13, 0);
+      lwGrad.addColorStop(0, '#3A3C44');
+      lwGrad.addColorStop(0.5, '#2A2C32');
+      lwGrad.addColorStop(1, '#1E2028');
+      ctx.fillStyle = lwGrad;
+      ctx.beginPath();
+      ctx.moveTo(-14, -20);
+      ctx.lineTo(-16, -24);
+      ctx.lineTo(-16, -56);
+      ctx.lineTo(-14, -60);
+      ctx.lineTo(-13, -60);
+      ctx.lineTo(-13, -20);
+      ctx.closePath();
+      ctx.fill();
+    }
+    // Right wall
+    {
+      const rwGrad = ctx.createLinearGradient(13, 0, 16, 0);
+      rwGrad.addColorStop(0, '#1E2028');
+      rwGrad.addColorStop(0.5, '#2A2C32');
+      rwGrad.addColorStop(1, '#252830');
+      ctx.fillStyle = rwGrad;
+      ctx.beginPath();
+      ctx.moveTo(13, -20);
+      ctx.lineTo(13, -60);
+      ctx.lineTo(14, -60);
+      ctx.lineTo(16, -56);
+      ctx.lineTo(16, -24);
+      ctx.lineTo(14, -20);
+      ctx.closePath();
+      ctx.fill();
+    }
+    // Top cap
+    ctx.fillStyle = '#2A2C32';
+    ctx.fillRect(-13, -59, 26, 3);
+    // Bottom cap
+    ctx.fillRect(-13, -20, 26, 3);
+
+    // 4f. Clamp rings over everything — y = -30, -42, -54
+    for (const cy of [-30, -42, -54]) {
+      ctx.fillStyle = '#1E2028';
+      ctx.fillRect(-17, cy - 2, 34, 4);
+      ctx.fillStyle = 'rgba(180,180,200,0.25)';
+      ctx.fillRect(-17, cy - 2, 34, 1);
+      // 4 bolts per ring
+      for (const bx of [-13, -5, 5, 13]) {
+        ctx.beginPath();
+        ctx.arc(bx, cy, 1.8, 0, TAU);
+        ctx.fillStyle = '#3C3E48';
+        ctx.fill();
+        ctx.beginPath();
+        ctx.arc(bx, cy, 0.9, 0, TAU);
+        ctx.fillStyle = '#14161A';
+        ctx.fill();
+      }
+    }
+
+    // 4g. Muzzle brake — outer crown shape + open rotating barrel face
+    const muzzleColor = this._getMuzzleColor();
+    // Outer octagonal crown
+    ctx.beginPath();
+    ctx.moveTo(-13, -60);
+    ctx.lineTo(-15, -62);
+    ctx.lineTo(-15, -68);
+    ctx.lineTo(-13, -70);
+    ctx.lineTo(13, -70);
+    ctx.lineTo(15, -68);
+    ctx.lineTo(15, -62);
+    ctx.lineTo(13, -60);
+    ctx.closePath();
+    ctx.fillStyle = muzzleColor;
+    ctx.fill();
+
+    // Muzzle crown rim highlight
+    ctx.fillStyle = 'rgba(255,255,255,0.1)';
+    ctx.fillRect(-14, -62, 28, 1);
+
+    // Dark muzzle face — open cavity showing rotating barrel ends
+    {
+      const muzzleFaceGrad = ctx.createRadialGradient(0, -65, 0, 0, -65, 11);
+      muzzleFaceGrad.addColorStop(0, '#0A0B0E');
+      muzzleFaceGrad.addColorStop(1, '#1E2028');
+      ctx.beginPath();
+      ctx.arc(0, -65, 11, 0, TAU);
+      ctx.fillStyle = muzzleFaceGrad;
+      ctx.fill();
+      // Rim ring
+      ctx.beginPath();
+      ctx.arc(0, -65, 11, 0, TAU);
+      ctx.strokeStyle = '#3A3C48';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+    }
+
+    // Rotating barrel tip circles inside the muzzle face
+    ctx.save();
+    ctx.translate(0, -65);
+    ctx.rotate(this.barrelSpin * Math.PI / 180);
+    for (let i = 0; i < NUM_BARRELS; i++) {
+      const angle = (TAU / NUM_BARRELS) * i;
+      const tx = Math.cos(angle) * BARREL_CIRCLE_RADIUS;
+      const ty = Math.sin(angle) * BARREL_CIRCLE_RADIUS;
+      ctx.save();
+      ctx.translate(tx, ty);
+      // Tip face with radial gradient
+      const tipGrad = ctx.createRadialGradient(-0.8, -0.8, 0, 0, 0, 3);
+      tipGrad.addColorStop(0, '#C0C4CC');
+      tipGrad.addColorStop(1, '#3A3C44');
+      ctx.beginPath();
+      ctx.arc(0, 0, 3, 0, TAU);
+      ctx.fillStyle = tipGrad;
+      ctx.fill();
+      // Bore hole
+      ctx.beginPath();
+      ctx.arc(0, 0, 1.8, 0, TAU);
+      ctx.fillStyle = '#050507';
+      ctx.fill();
+      // Bore glint
+      ctx.beginPath();
+      ctx.arc(-0.6, -0.6, 0.6, 0, TAU);
+      ctx.fillStyle = 'rgba(255,255,255,0.4)';
+      ctx.fill();
+      ctx.restore();
+    }
+    // Center hub on muzzle face
+    {
+      const hubGrad = ctx.createRadialGradient(0, 0, 0, 0, 0, 3);
+      hubGrad.addColorStop(0, '#4050A0');
+      hubGrad.addColorStop(1, '#20253A');
+      ctx.beginPath();
+      ctx.arc(0, 0, 3, 0, TAU);
+      ctx.fillStyle = hubGrad;
+      ctx.fill();
+    }
+    ctx.restore(); // muzzle barrel spin
+
+    // ── 5. Heat glow overlay ──────────────────────────────────────
+    if (this.overheated) {
+      // Stage 3: pulsing red inferno
+      const pulse = 0.5 + Math.sin(this._elapsed * 8) * 0.3;
+      ctx.save();
+      ctx.shadowColor = '#FF2200';
+      ctx.shadowBlur = 20;
+      ctx.beginPath();
+      ctx.arc(0, -40, 20, 0, TAU);
+      ctx.fillStyle = `rgba(255, 34, 0, ${(pulse * 0.22).toFixed(3)})`;
+      ctx.fill();
+      ctx.shadowBlur = 0;
+      ctx.restore();
+      // Warning shimmer lines
+      ctx.save();
+      ctx.strokeStyle = `rgba(255,50,0,${(pulse * 0.35).toFixed(3)})`;
+      ctx.lineWidth = 1;
+      for (let li = 0; li < 3; li++) {
+        const lx = randf(-14, 14);
+        ctx.beginPath();
+        ctx.moveTo(lx, -24); ctx.lineTo(lx + randf(-4, 4), -58);
+        ctx.stroke();
+      }
+      ctx.restore();
+    } else if (this.heat > 0.9) {
+      const t = (this.heat - 0.9) / 0.1;
+      const pulse = 0.5 + Math.sin(this._elapsed * 10) * 0.3;
+      ctx.save();
+      ctx.shadowColor = '#FF2200';
+      ctx.shadowBlur = 14 + t * 8;
+      ctx.beginPath();
+      ctx.arc(0, -40, 16, 0, TAU);
+      ctx.fillStyle = `rgba(255, 34, 0, ${(t * pulse * 0.18).toFixed(3)})`;
+      ctx.fill();
+      ctx.restore();
+    } else if (this.heat > 0.7) {
+      // Stage 2: orange glow
+      const t = (this.heat - 0.7) / 0.2;
+      ctx.save();
+      ctx.shadowColor = '#FF6600';
+      ctx.shadowBlur = 14 + t * 8;
+      ctx.beginPath();
+      ctx.arc(0, -40, 14, 0, TAU);
+      ctx.fillStyle = `rgba(255, 102, 0, ${(t * 0.16).toFixed(3)})`;
+      ctx.fill();
+      ctx.restore();
+    } else if (this.heat > 0.5) {
+      // Stage 1: subtle warm shimmer
+      const t = (this.heat - 0.5) / 0.2;
+      ctx.beginPath();
+      ctx.arc(0, -40, 12, 0, TAU);
+      ctx.fillStyle = `rgba(255, 176, 64, ${(t * 0.1).toFixed(3)})`;
+      ctx.fill();
+    }
+
+    // ── 6. Muzzle flash ──────────────────────────────────────────
     if (this._muzzleFlashTimer > 0) {
       const flashAlpha = (this._muzzleFlashTimer / 0.04) * this._muzzleFlashIntensity;
-      const flashLen = 20 + Math.random() * 15;
-      const flashW = 8 + Math.random() * 4;
+      const flashLen = 22 + Math.random() * 14;
+      const flashW = 9 + Math.random() * 4;
+      const muzzleY = -72;
 
-      // Main flash cone
+      // Main cone
       ctx.beginPath();
-      ctx.moveTo(-flashW, -54);
-      ctx.lineTo(0, -54 - flashLen);
-      ctx.lineTo(flashW, -54);
+      ctx.moveTo(-flashW, muzzleY);
+      ctx.lineTo(0, muzzleY - flashLen);
+      ctx.lineTo(flashW, muzzleY);
       ctx.closePath();
       ctx.fillStyle = `rgba(255, 240, 150, ${(flashAlpha * 0.9).toFixed(3)})`;
       ctx.fill();
 
       // Inner white core
       ctx.beginPath();
-      ctx.moveTo(-flashW * 0.4, -54);
-      ctx.lineTo(0, -54 - flashLen * 0.7);
-      ctx.lineTo(flashW * 0.4, -54);
+      ctx.moveTo(-flashW * 0.4, muzzleY);
+      ctx.lineTo(0, muzzleY - flashLen * 0.7);
+      ctx.lineTo(flashW * 0.4, muzzleY);
       ctx.closePath();
       ctx.fillStyle = `rgba(255, 255, 255, ${(flashAlpha * 0.7).toFixed(3)})`;
       ctx.fill();
 
-      // Side sparks
-      for (let i = 0; i < 3; i++) {
+      // Side coronas
+      for (const sx of [-flashW * 1.4, flashW * 1.4]) {
+        ctx.beginPath();
+        ctx.arc(sx, muzzleY - flashLen * 0.2, flashW * 0.55, 0, TAU);
+        ctx.fillStyle = `rgba(255, 200, 50, ${(flashAlpha * 0.45).toFixed(3)})`;
+        ctx.fill();
+      }
+
+      // Bloom
+      ctx.beginPath();
+      ctx.arc(0, muzzleY, 30, 0, TAU);
+      ctx.fillStyle = `rgba(255, 220, 100, ${(flashAlpha * 0.15).toFixed(3)})`;
+      ctx.fill();
+
+      // Sparks
+      for (let i = 0; i < 5; i++) {
         const sx = randf(-flashW * 1.5, flashW * 1.5);
-        const sy = -54 - randf(3, flashLen * 0.5);
+        const sy = muzzleY - randf(3, flashLen * 0.5);
         ctx.beginPath();
         ctx.arc(sx, sy, randf(1, 2.5), 0, TAU);
         ctx.fillStyle = `rgba(255, 200, 50, ${(flashAlpha * 0.6).toFixed(3)})`;
         ctx.fill();
       }
-
-      // Glow circle around muzzle
-      ctx.beginPath();
-      ctx.arc(0, -52, 14, 0, TAU);
-      ctx.fillStyle = `rgba(255, 180, 50, ${(flashAlpha * 0.25).toFixed(3)})`;
-      ctx.fill();
     }
 
-    // === Smoke wisps ===
+    // ── Smoke wisps ───────────────────────────────────────────────
     for (const p of this._smokeParticles) {
       const smokeAlpha = p.alpha * (1 - p.age / p.lifetime);
       if (smokeAlpha < 0.01) continue;
@@ -399,48 +625,27 @@ export class VulkanCannon extends Launcher {
       ctx.fill();
     }
 
-    // === Overheat glow ===
-    if (this.overheated) {
-      const pulse = 0.5 + Math.sin(this._elapsed * 8) * 0.3;
-      ctx.beginPath();
-      ctx.arc(0, -30, 18, 0, TAU);
-      ctx.fillStyle = `rgba(255, 50, 10, ${(pulse * 0.2).toFixed(3)})`;
-      ctx.fill();
-      // Warning pulse on barrels
-      ctx.beginPath();
-      ctx.arc(0, -50, 12, 0, TAU);
-      ctx.fillStyle = `rgba(255, 30, 5, ${(pulse * 0.15).toFixed(3)})`;
-      ctx.fill();
-    } else if (this.heat > 0.5) {
-      // Subtle heat glow
-      const heatGlow = (this.heat - 0.5) * 2;
-      ctx.beginPath();
-      ctx.arc(0, -30, 14, 0, TAU);
-      ctx.fillStyle = `rgba(255, 80, 20, ${(heatGlow * 0.1).toFixed(3)})`;
-      ctx.fill();
-    }
-
     ctx.restore(); // turret rotation
 
     ctx.restore(); // entity position
 
-    // === Shell casings (drawn in world space) ===
+    // ── Shell casings (world space) ───────────────────────────────
     for (const s of this._shells) {
       const shellAlpha = clamp(1 - s.age / 0.6, 0, 1);
       ctx.save();
       ctx.translate(s.x, s.y);
       ctx.rotate(s.rot);
-      // Brass shell body
       ctx.beginPath();
       ctx.rect(-1.5, -4, 3, 8);
-      ctx.fillStyle = `rgba(200, 165, 50, ${shellAlpha.toFixed(3)})`;
+      ctx.fillStyle = `rgba(214, 178, 54, ${shellAlpha.toFixed(3)})`;
       ctx.fill();
-      // Primer (base)
+      ctx.strokeStyle = `rgba(0,0,0,${(shellAlpha * 0.4).toFixed(3)})`;
+      ctx.lineWidth = 0.8;
+      ctx.strokeRect(-1.5, -4, 3, 8);
       ctx.beginPath();
       ctx.arc(0, 4, 1.5, 0, TAU);
       ctx.fillStyle = `rgba(180, 140, 40, ${shellAlpha.toFixed(3)})`;
       ctx.fill();
-      // Highlight
       ctx.beginPath();
       ctx.rect(-0.5, -3, 1, 6);
       ctx.fillStyle = `rgba(255, 220, 100, ${(shellAlpha * 0.4).toFixed(3)})`;

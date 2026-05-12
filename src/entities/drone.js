@@ -77,8 +77,29 @@ export class Drone extends Entity {
     ctx.translate(this.x, this.y);
     ctx.scale(this.direction, 1);
 
-    drawPoly(ctx, BODY, rgba(0.30, 0.52, 0.75));
-    drawPoly(ctx, COCKPIT, rgba(0.15, 0.70, 1.0));
+    // Body gradient #3A5882 to #1E3050 per spec
+    // Draw using polygon path with inline gradient
+    ctx.save();
+    const bodyGrad = ctx.createLinearGradient(-45, -5, 45, 5);
+    bodyGrad.addColorStop(0, '#3A5882');
+    bodyGrad.addColorStop(1, '#1E3050');
+    ctx.fillStyle = bodyGrad;
+    ctx.beginPath();
+    const bodyPts = BODY;
+    ctx.moveTo(bodyPts[0], bodyPts[1]);
+    for (let i = 2; i < bodyPts.length; i += 2) ctx.lineTo(bodyPts[i], bodyPts[i+1]);
+    ctx.closePath(); ctx.fill();
+    ctx.restore();
+
+    // Cockpit — #0088CC with outline
+    drawPoly(ctx, COCKPIT, rgba(0.0, 0.53, 0.80));
+    ctx.strokeStyle = 'rgba(0,180,255,0.6)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(COCKPIT[0], COCKPIT[1]);
+    for (let i = 2; i < COCKPIT.length; i += 2) ctx.lineTo(COCKPIT[i], COCKPIT[i+1]);
+    ctx.closePath(); ctx.stroke();
+
     drawPoly(ctx, UPPER_WING, rgba(0.22, 0.42, 0.62, 0.95));
     drawPoly(ctx, LOWER_FIN, rgba(0.20, 0.38, 0.58, 0.95));
     drawPoly(ctx, TAIL_FIN, rgba(0.25, 0.45, 0.65));
@@ -86,6 +107,29 @@ export class Drone extends Entity {
     // Animated engine glow
     const glowAlpha = 0.55 + Math.sin(performance.now() * 0.01) * 0.4;
     drawPoly(ctx, ENGINE_GLOW, rgba(1.0, 0.7, 0.15, glowAlpha));
+
+    // Engine trail particles
+    for (let i = 0; i < 3; i++) {
+      const tx = -45 - i * 8;
+      const ty = randf(-3, 3);
+      const ta = (0.5 - i * 0.15) * glowAlpha;
+      if (ta > 0.05) {
+        ctx.beginPath();
+        ctx.arc(tx, ty, randf(1.5, 4), 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(255,160,30,${ta.toFixed(3)})`;
+        ctx.fill();
+      }
+    }
+
+    // Bomb-bay indicator dot pulsing red per spec
+    const bombPulse = 0.5 + Math.sin(performance.now() * 0.008) * 0.5;
+    ctx.save();
+    ctx.shadowColor = '#FF0000';
+    ctx.shadowBlur = 6 * bombPulse;
+    ctx.fillStyle = `rgba(255,30,10,${(0.8 * bombPulse).toFixed(3)})`;
+    ctx.beginPath(); ctx.arc(20, 3, 3, 0, Math.PI * 2); ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.restore();
 
     ctx.restore();
   }

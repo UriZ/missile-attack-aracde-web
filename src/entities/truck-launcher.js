@@ -97,25 +97,149 @@ export class TruckLauncher extends Launcher {
     ctx.save();
     ctx.translate(this.x, this.y);
 
-    // Selection glow
+    // Selection glow — orange per spec
     if (this.isSelected) {
-      drawPoly(ctx, GLOW2, `rgba(51,153,255,${(this._glowAlpha * 0.43).toFixed(3)})`);
-      drawPoly(ctx, GLOW1, `rgba(51,153,255,${this._glowAlpha.toFixed(3)})`);
+      ctx.shadowColor = '#FF6600';
+      ctx.shadowBlur = 18;
+      drawPoly(ctx, GLOW2, `rgba(255,136,0,${(this._glowAlpha * 0.25).toFixed(3)})`);
+      drawPoly(ctx, GLOW1, `rgba(255,136,0,${(this._glowAlpha * 0.55).toFixed(3)})`);
+      ctx.shadowBlur = 0;
     }
 
-    // Base polygons
-    for (const p of BASE_POLYS) {
-      drawPoly(ctx, p.pts, p.c);
+    // Chassis gradient
+    ctx.save();
+    const chassisGrad = ctx.createLinearGradient(0, -6, 0, 22);
+    chassisGrad.addColorStop(0, '#47592D');
+    chassisGrad.addColorStop(1, '#2A3519');
+    ctx.fillStyle = chassisGrad;
+    ctx.fillRect(-55, -6, 110, 28);
+    // Scratch lines
+    ctx.strokeStyle = 'rgba(0,0,0,0.2)';
+    ctx.lineWidth = 1;
+    for (let i = 0; i < 5; i++) {
+      const ly = -4 + i * 5;
+      ctx.beginPath(); ctx.moveTo(-55, ly); ctx.lineTo(55, ly); ctx.stroke();
+    }
+    // Rim
+    ctx.fillStyle = '#141F0C';
+    ctx.fillRect(-55, 22, 110, 2);
+    // Chassis panel
+    ctx.fillStyle = 'rgba(36,46,32,0.7)';
+    ctx.fillRect(-16, 16, 71, 4);
+    ctx.restore();
+
+    // Cab with gradient
+    ctx.save();
+    const cabGrad = ctx.createLinearGradient(-55, -32, -16, -6);
+    cabGrad.addColorStop(0, '#526644');
+    cabGrad.addColorStop(1, '#303D27');
+    ctx.fillStyle = cabGrad;
+    ctx.beginPath();
+    ctx.moveTo(-55, -6); ctx.lineTo(-16, -6); ctx.lineTo(-16, -32); ctx.lineTo(-48, -32); ctx.lineTo(-55, -24);
+    ctx.closePath(); ctx.fill();
+    // Cab roof highlight
+    ctx.fillStyle = 'rgba(255,255,255,0.12)';
+    ctx.fillRect(-48, -36, 32, 4);
+    // Window (blue-gray)
+    ctx.fillStyle = 'rgba(0.22*255,0.36*255,0.52*255,0.92)';
+    ctx.fillStyle = 'rgba(56,92,133,0.92)';
+    ctx.beginPath();
+    ctx.moveTo(-46,-9); ctx.lineTo(-20,-9); ctx.lineTo(-20,-28); ctx.lineTo(-44,-28);
+    ctx.closePath(); ctx.fill();
+    // Window glare (alpha 0.42 per spec)
+    ctx.fillStyle = 'rgba(179,209,242,0.42)';
+    ctx.beginPath();
+    ctx.moveTo(-46,-9); ctx.lineTo(-38,-9); ctx.lineTo(-38,-28); ctx.lineTo(-46,-22);
+    ctx.closePath(); ctx.fill();
+    ctx.restore();
+
+    // Grille
+    ctx.fillStyle = '#262922';
+    ctx.fillRect(-55, -22, 6, 14);
+    ctx.strokeStyle = '#434828';
+    ctx.lineWidth = 1;
+    for (let s = 0; s < 3; s++) {
+      const gy = -20 + s * 4;
+      ctx.beginPath(); ctx.moveTo(-55, gy); ctx.lineTo(-49, gy); ctx.stroke();
+    }
+
+    // Headlights — bright circles with glow
+    ctx.save();
+    ctx.shadowColor = '#FFFFAA';
+    ctx.shadowBlur = 10;
+    ctx.fillStyle = '#FAEEA0';
+    ctx.beginPath(); ctx.arc(-52.5, -24, 3, 0, Math.PI * 2); ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.restore();
+
+    // Exhaust pipe
+    ctx.fillStyle = '#282E22';
+    ctx.fillRect(-20, -44, 4, 12);
+    ctx.fillStyle = '#1A1E16';
+    ctx.fillRect(-22, -44, 8, 2);
+
+    // Wheels — improved with gradient hubs
+    const wheelDefs = [{ cx: -20, cy: 22 }, { cx: 8, cy: 22 }, { cx: 40, cy: 22 }];
+    for (const wd of wheelDefs) {
+      // Outer tire
+      ctx.fillStyle = '#1A1A1A';
+      ctx.beginPath(); ctx.arc(wd.cx, wd.cy, 10, 0, Math.PI * 2); ctx.fill();
+      // Inner hub gradient
+      const hubGrad = ctx.createRadialGradient(wd.cx - 2, wd.cy - 2, 1, wd.cx, wd.cy, 7);
+      hubGrad.addColorStop(0, '#888888');
+      hubGrad.addColorStop(1, '#333333');
+      ctx.fillStyle = hubGrad;
+      ctx.beginPath(); ctx.arc(wd.cx, wd.cy, 7, 0, Math.PI * 2); ctx.fill();
+      // Hub highlight
+      ctx.fillStyle = '#8A8A8A';
+      ctx.beginPath(); ctx.arc(wd.cx, wd.cy, 2.5, 0, Math.PI * 2); ctx.fill();
+      // Dark center dot
+      ctx.fillStyle = '#222222';
+      ctx.beginPath(); ctx.arc(wd.cx, wd.cy, 1.2, 0, Math.PI * 2); ctx.fill();
+      // Chrome arch highlight
+      ctx.strokeStyle = 'rgba(200,200,200,0.25)';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.arc(wd.cx - 2, wd.cy - 3, 6, Math.PI * 1.1, Math.PI * 1.8); ctx.stroke();
     }
 
     // Turret (rotated)
     ctx.save();
     ctx.rotate(this.turretRotation);
-    for (const p of TURRET_POLYS) {
-      drawPoly(ctx, p.pts, p.c);
-    }
-    ctx.restore();
 
-    ctx.restore();
+    // Rocket pod with gradient
+    const podGrad = ctx.createLinearGradient(-14, -54, 52, -4);
+    podGrad.addColorStop(0, '#616659');
+    podGrad.addColorStop(1, '#3D4038');
+    ctx.fillStyle = podGrad;
+    ctx.fillRect(-14, -54, 66, 50);
+    // Sides
+    ctx.fillStyle = '#2E3028';
+    ctx.fillRect(-14, -54, 3, 50);
+    ctx.fillRect(49, -54, 3, 50);
+    ctx.fillRect(-14, -54, 66, 2);
+    // Ribs
+    ctx.fillStyle = '#282A24';
+    ctx.fillRect(10, -54, 2, 50);
+    ctx.fillRect(33, -54, 2, 50);
+
+    // Rockets — 4 with improved colors
+    for (let r = 0; r < 4; r++) {
+      const rx = -4 + r * 12;
+      ctx.fillStyle = '#993322';
+      ctx.fillRect(rx, -52, 8, 36);
+      ctx.fillStyle = 'rgba(255,160,120,0.2)';
+      ctx.fillRect(rx, -52, 2, 36);
+      // Tip
+      ctx.fillStyle = '#EEEADE';
+      ctx.beginPath();
+      ctx.moveTo(rx, -52); ctx.lineTo(rx + 4, -58); ctx.lineTo(rx + 8, -52);
+      ctx.closePath(); ctx.fill();
+      // Band
+      ctx.fillStyle = '#E8D810';
+      ctx.fillRect(rx, -34, 8, 4);
+    }
+
+    ctx.restore(); // turret rotation
+    ctx.restore(); // entity position
   }
 }

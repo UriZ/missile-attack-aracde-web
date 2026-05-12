@@ -80,11 +80,12 @@ export class WaveSystem {
     const budget = 6 + wave * 4;
 
     const costs = {
-      missile:       1,
-      super_missile: 3,
-      drone:         2,
-      suicide_drone: 3,
-      nuke:          6,
+      missile:         1,
+      super_missile:   3,
+      drone:           2,
+      suicide_drone:   3,
+      transport_plane: 5,
+      nuke:            6,
     };
 
     // ── Determine enemy pool for this wave ──
@@ -92,6 +93,7 @@ export class WaveSystem {
     if (wave >= 2) pool.push('super_missile');
     if (wave >= 2) pool.push('drone');
     if (wave >= 3) pool.push('suicide_drone');
+    if (wave >= 2) pool.push('transport_plane');
     if (wave >= 1) pool.push('nuke'); // TODO: revert to wave >= 5 after testing
 
     // ── Spend the budget randomly ──
@@ -145,6 +147,10 @@ export class WaveSystem {
     for (const event of events) {
       if (event.type === 'nuke') {
         event.time = waveDuration * 0.4 + rng() * waveDuration * 0.5;
+      }
+      // Transport planes can come any time — slight bias toward middle of wave
+      if (event.type === 'transport_plane') {
+        event.time = waveDuration * 0.2 + rng() * waveDuration * 0.6;
       }
     }
 

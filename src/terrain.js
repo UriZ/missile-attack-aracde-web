@@ -328,7 +328,11 @@ export class Terrain extends Entity {
 
   _drawGround(ctx) {
     const n = this.heights.length;
-    ctx.fillStyle = rgba(0.24, 0.20, 0.14);
+    // Ground gradient: #453828 to #2A2018 top-to-bottom
+    const groundGrad = ctx.createLinearGradient(0, 0, 0, TERRAIN_DEPTH);
+    groundGrad.addColorStop(0, '#453828');
+    groundGrad.addColorStop(1, '#2A2018');
+    ctx.fillStyle = groundGrad;
     ctx.beginPath();
     ctx.moveTo(0, TERRAIN_DEPTH);
     for (let i = 0; i < n; i++) {
@@ -341,7 +345,11 @@ export class Terrain extends Entity {
 
   _drawGrass(ctx) {
     const n = this.heights.length;
-    ctx.fillStyle = rgba(0.22, 0.40, 0.15);
+    // Grass gradient: #4A8A2E to #2A5018 top-to-bottom
+    const grassGrad = ctx.createLinearGradient(0, -GRASS_DEPTH, 0, GRASS_DEPTH);
+    grassGrad.addColorStop(0, '#4A8A2E');
+    grassGrad.addColorStop(1, '#2A5018');
+    ctx.fillStyle = grassGrad;
     ctx.beginPath();
     // Top edge left-to-right
     for (let i = 0; i < n; i++) {
@@ -349,27 +357,47 @@ export class Terrain extends Entity {
       if (i === 0) ctx.moveTo(x, this.heights[i]);
       else ctx.lineTo(x, this.heights[i]);
     }
-    // Bottom edge right-to-left — always draw the full grass band so crater
-    // edges don't produce zero-height degenerate strips.
+    // Bottom edge right-to-left
     for (let i = n - 1; i >= 0; i--) {
       const x = i * TERRAIN_RESOLUTION;
       ctx.lineTo(x, this.heights[i] + GRASS_DEPTH);
     }
     ctx.closePath();
     ctx.fill();
+
+    // 1px highlight on grass top edge
+    ctx.strokeStyle = 'rgba(120,200,80,0.35)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (let i = 0; i < n; i++) {
+      const x = i * TERRAIN_RESOLUTION;
+      if (i === 0) ctx.moveTo(x, this.heights[i]);
+      else ctx.lineTo(x, this.heights[i]);
+    }
+    ctx.stroke();
+
+    // Atmospheric haze strip at horizon
+    const hazeY = -60; // relative offset above terrain surface
+    const hazeGrad = ctx.createLinearGradient(0, hazeY - 20, 0, hazeY + 20);
+    hazeGrad.addColorStop(0, 'rgba(80,100,140,0)');
+    hazeGrad.addColorStop(0.5, 'rgba(80,100,140,0.12)');
+    hazeGrad.addColorStop(1, 'rgba(80,100,140,0)');
+    ctx.fillStyle = hazeGrad;
+    ctx.fillRect(0, hazeY - 20, TERRAIN_WIDTH, 40);
   }
 
   // ── Background Mountains ──────────────────────────────────
 
   _addBackgroundMountains() {
-    // Layer 1: far distant
-    this._addMountainLayer(0.15, 0.18, 0.22, 0.7, -280, 160, 5, 0.6, true);
-    // Layer 2: mid-distance
-    this._addMountainLayer(0.18, 0.22, 0.26, 0.75, -180, 120, 7, 0.8, false);
-    // Layer 3: nearby hills
-    this._addMountainLayer(0.22, 0.28, 0.22, 0.65, -100, 80, 10, 1.0, false);
-    // Snow caps on far mountains
+    // Layer 1: far distant — #161C28
+    this._addMountainLayer(0.086, 0.110, 0.157, 0.88, -280, 160, 5, 0.6, true);
+    // Layer 2: mid-distance — #1C2430
+    this._addMountainLayer(0.110, 0.141, 0.188, 0.85, -180, 120, 7, 0.8, false);
+    // Layer 3: nearby hills — #222C20
+    this._addMountainLayer(0.133, 0.173, 0.125, 0.80, -100, 80, 10, 1.0, false);
+    // Snow caps on far mountains (alpha 0.7, second layer)
     this._addSnowCaps(-280, 160, 5);
+    this._addSnowCapsSecond(-280, 160, 5);
   }
 
   _addMountainLayer(r, g, b, a, baseY, maxHeight, numPeaks, jaggedness, hasSnow) {
@@ -402,7 +430,7 @@ export class Terrain extends Entity {
   _addSnowCaps(baseY, maxHeight, numPeaks) {
     const phase = Math.random() * TAU;
     const steps = numPeaks * 6;
-    const snowColor = rgba(0.85, 0.88, 0.92, 0.5);
+    const snowColor = rgba(0.85, 0.88, 0.92, 0.7); // alpha 0.7 per spec
 
     // Collect snow cap triangles
     const caps = [];
@@ -429,6 +457,42 @@ export class Terrain extends Entity {
         ctx.moveTo(c.x - c.sw * 0.5, c.peakY + c.snowH * 0.5);
         ctx.lineTo(c.x, c.peakY - c.snowH);
         ctx.lineTo(c.x + c.sw * 0.5, c.peakY + c.snowH * 0.5);
+        ctx.closePath();
+        ctx.fill();
+      }
+    };
+    this.decorations.push({ x: 0, width: TERRAIN_WIDTH, drawFn, _isMountain: true });
+  }
+
+  /** Second snow cap layer — slightly offset for depth. */
+  _addSnowCapsSecond(baseY, maxHeight, numPeaks) {
+    const phase = Math.random() * TAU;
+    const steps = numPeaks * 6;
+    const snowColor = rgba(0.92, 0.94, 0.97, 0.45);
+
+    const caps = [];
+    for (let i = 0; i < steps; i++) {
+      const t = i / steps;
+      let h = 0;
+      h += Math.sin(t * Math.PI * numPeaks + phase) * maxHeight * 0.5;
+      h += Math.sin(t * Math.PI * numPeaks * 2.3 + phase * 1.7) * maxHeight * 0.25 * 0.6;
+      h += Math.sin(t * Math.PI * numPeaks * 5.1 + phase * 3.2) * maxHeight * 0.08 * 0.6;
+      const x = t * TERRAIN_WIDTH;
+      if (h > maxHeight * 0.72) {
+        const snowH = (h - maxHeight * 0.72) * 0.3;
+        const peakY = baseY - h;
+        const sw = randf(8, 18);
+        caps.push({ x, peakY, snowH, sw });
+      }
+    }
+
+    const drawFn = (ctx) => {
+      ctx.fillStyle = snowColor;
+      for (const c of caps) {
+        ctx.beginPath();
+        ctx.moveTo(c.x - c.sw * 0.3, c.peakY + c.snowH * 0.4);
+        ctx.lineTo(c.x, c.peakY - c.snowH);
+        ctx.lineTo(c.x + c.sw * 0.3, c.peakY + c.snowH * 0.4);
         ctx.closePath();
         ctx.fill();
       }
@@ -911,15 +975,23 @@ export class Terrain extends Entity {
       ctx.closePath();
       ctx.fill();
 
-      // Windows
+      // Windows — alternating lit/unlit with warm glow
       const winW = 8, winH = 9;
       const winY = -h * 0.58;
-      for (const frac of winPositions) {
+      for (let wi2 = 0; wi2 < winPositions.length; wi2++) {
+        const frac = winPositions[wi2];
         const wx = w * frac - winW * 0.5;
+        const isLit = (Math.floor(x * 7 + wi2 * 13) % 3) !== 0; // ~67% lit
         // Frame
         _fillRect(ctx, wx - 1.5, winY - 1.5, winW + 3, winH + 3, rgba(0.35, 0.30, 0.25));
         // Glass
-        _fillRect(ctx, wx, winY, winW, winH, rgba(0.92, 0.85, 0.45, 0.9));
+        if (isLit) {
+          _fillRect(ctx, wx, winY, winW, winH, rgba(0.95, 0.88, 0.50, 0.95));
+          // Warm glow halo around lit window
+          _fillRect(ctx, wx - 3, winY - 2, winW + 6, winH + 4, rgba(1.0, 0.85, 0.40, 0.12));
+        } else {
+          _fillRect(ctx, wx, winY, winW, winH, rgba(0.20, 0.22, 0.28, 0.9));
+        }
         // Mullions
         _fillRect(ctx, wx + winW * 0.5 - 0.5, winY, 1, winH, rgba(0.30, 0.25, 0.20));
         _fillRect(ctx, wx, winY + winH * 0.5 - 0.5, winW, 1, rgba(0.30, 0.25, 0.20));
@@ -1036,13 +1108,20 @@ export class Terrain extends Entity {
         _fillRect(ctx, -4, py, w * 0.4 + 4, 1.5, rgba(0.28, 0.27, 0.25, 0.4));
       }
 
-      // Industrial windows
+      // Industrial windows — some lit, some dark
       const winW = 9, winH = 12;
       const winY = -h * 0.52;
       for (let wi = 0; wi < numWins; wi++) {
         const wx = 12 + wi * (w - 24) / Math.max(numWins - 1, 1) - winW * 0.5;
+        const isLit = (Math.floor(x * 5 + wi * 11) % 4) !== 0; // ~75% lit
         _fillRect(ctx, wx - 1.5, winY - 1.5, winW + 3, winH + 3, rgba(0.28, 0.28, 0.30));
-        _fillRect(ctx, wx, winY, winW, winH, rgba(0.55, 0.65, 0.75, 0.7));
+        if (isLit) {
+          _fillRect(ctx, wx, winY, winW, winH, rgba(0.55, 0.68, 0.80, 0.75));
+          // Cool blue glow for industrial
+          _fillRect(ctx, wx - 2, winY - 2, winW + 4, winH + 4, rgba(0.30, 0.55, 0.80, 0.08));
+        } else {
+          _fillRect(ctx, wx, winY, winW, winH, rgba(0.15, 0.18, 0.22, 0.9));
+        }
         _fillRect(ctx, wx, winY + winH * 0.5 - 0.5, winW, 1, rgba(0.28, 0.28, 0.30));
       }
 

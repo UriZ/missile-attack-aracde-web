@@ -58,3 +58,13 @@ Tools used: Read [files], Grep [patterns], Bash [commands].
 ```
 
 Be specific — name the files you read, the patterns you searched, and the reasoning behind your design choices.
+
+## Improvement Insights (MANDATORY)
+
+After your TLDR, add an **Improvement Insights** section. Reflect on your task and suggest specific improvements to:
+- **Your own agent definition** (game-architect.md) — missing context, unclear instructions, tools you needed
+- **CLAUDE.md** — project conventions or context that would have saved you time
+- **Developer handoff** — what would make your specs easier for developers to implement?
+- **Workflow** — issue descriptions, label accuracy, handoff clarity
+
+Only include actionable suggestions. These will be reviewed by the team lead and applied to improve future sessions.

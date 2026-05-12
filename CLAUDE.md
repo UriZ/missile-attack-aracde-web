@@ -61,15 +61,17 @@ All tasks MUST be tracked as GitHub issues on `UriZ/missile-attack-aracde-web`. 
 - `architect` — needs architect design before implementation
 - `developer` — ready for developer implementation
 - `qa` — needs QA verification
+- `ui-design` — needs UI/visual design spec from ui-designer agent
 - `in-progress` — currently being worked on
 - `won't fix` — decided not to fix (with reasoning in comment)
 
 ### Issue lifecycle:
-1. **Feature request**: Create issue with `enhancement` + `architect` labels
-2. **Architect designs**: Add design spec as a comment, relabel to `developer`
+1. **Feature request**: Create issue with `enhancement` + `architect` labels (or `ui-design` for visual work)
+2. **Architect/UI designer designs**: Add design spec as a comment, relabel to `developer`
 3. **Developer implements**: Add implementation notes as a comment, relabel to `qa`
-4. **QA verifies**: If bugs found → create new `bug` issues. If clean → close the issue with a comment.
-5. **Bug fix**: Developer fixes, relabels to `qa` for re-verification.
+4. **QA verifies**: Reports findings as a comment. If bugs found → create new `bug` issues. If clean → relabel to `review`.
+5. **User approves**: The user (UriZ) is the FINAL approver. After QA, present the results to the user. If the user approves, the feature is done (issue stays open for future iterations unless user says to close). If the user is not happy, the issue goes back to `developer` or `ui-design` with their feedback.
+6. **Bug fix**: Developer fixes, relabels to `qa` for re-verification.
 
 ### How to create issues:
 ```bash
@@ -139,3 +141,26 @@ All multi-agent work MUST also be logged to `SESSION_LOG.md` in the project root
 
 ### Multi-agent workflow:
 The standard flow is: **Architect designs → Developers implement → QA finds bugs → Developers fix → QA validates**. Do NOT trust developer fixes blindly — always have QA verify.
+
+**IMPORTANT: QA is automatic.** When a developer agent completes and an issue is relabeled to `qa`, the team lead MUST immediately spawn a QA agent to verify the work. Never leave issues sitting in `qa` status without an active agent working on them. The full pipeline runs without manual intervention.
+
+## Continuous Self-Improvement (MANDATORY)
+
+Every agent MUST include an **Improvement Insights** section at the end of their TLDR. This is how the team gets better over time.
+
+### What to report:
+After completing your task, reflect on what you learned and suggest improvements to:
+1. **Your own agent definition** — Were your instructions unclear? Missing context? Should your tools list change? Were there patterns you had to figure out that should be documented?
+2. **CLAUDE.md** — Is there project context missing that would have saved you time? Are there conventions not documented?
+3. **Other agents** — Did a spec from an architect/designer leave gaps? Was a handoff unclear?
+4. **Workflow** — Did the issue lifecycle work well? Were labels accurate? Was the task description sufficient?
+
+### Format:
+```
+## Improvement Insights
+- **[agent-name.md]**: [specific suggestion, e.g. "Add note that all Canvas gradients need ctx.save/restore wrapping"]
+- **[CLAUDE.md]**: [specific suggestion, e.g. "Document that missile-fragment.js exists and is in the enemy_missiles group"]
+- **[workflow]**: [specific suggestion, e.g. "UI overhaul specs are too large for one developer — split into multiple issues"]
+```
+
+Only include actionable, specific suggestions — not generic praise or complaints. The team lead will review and apply relevant improvements to agent definitions and project docs between sessions.

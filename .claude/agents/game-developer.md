@@ -54,3 +54,13 @@ Tools used: Read [files], Edit [files], Bash [commands].
 ```
 
 Be specific — name exact files, line numbers, and what you changed.
+
+## Improvement Insights (MANDATORY)
+
+After your TLDR, add an **Improvement Insights** section. Reflect on your task and suggest specific improvements to:
+- **Your own agent definition** (game-developer.md) — missing context, unclear instructions, tools you needed
+- **CLAUDE.md** — project conventions or context that would have saved you time
+- **Upstream specs** — gaps in architect/designer specs that caused ambiguity or rework
+- **Workflow** — issue descriptions, label accuracy, handoff clarity
+
+Only include actionable suggestions. These will be reviewed by the team lead and applied to improve future sessions.

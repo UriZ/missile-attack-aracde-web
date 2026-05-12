@@ -31,6 +31,14 @@ const FIRE_COLORS = [
   rgba(0.35, 0.04, 0, 0),
 ];
 
+/** Trace polygon path from flat array without filling — caller fills/strokes. */
+function _polyPath(ctx, pts) {
+  ctx.beginPath();
+  ctx.moveTo(pts[0], pts[1]);
+  for (let i = 2; i < pts.length; i += 2) ctx.lineTo(pts[i], pts[i + 1]);
+  ctx.closePath();
+}
+
 export class Missile extends Entity {
   constructor(x, y) {
     super(x, y);
@@ -99,16 +107,41 @@ export class Missile extends Entity {
   }
 
   draw(ctx) {
-    // Smoke trail (world space)
+    // 3-layer smoke trail (world space)
     for (let i = 0; i < this._trail.length; i++) {
       const p = this._trail[i];
       const t = i / this._trail.length; // 0 = oldest, 1 = newest
-      const radius = 3 + (1 - t) * 4;
-      const alpha = t * 0.35;
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, radius, 0, Math.PI * 2);
-      ctx.fillStyle = `rgba(180,180,180,${alpha})`;
-      ctx.fill();
+
+      // Layer 1: warm fresh smoke (newest puffs)
+      if (t > 0.65) {
+        const a = (t - 0.65) / 0.35 * 0.45;
+        const r = 3 + (1 - t) * 3;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(220,200,180,${a.toFixed(3)})`;
+        ctx.fill();
+      }
+
+      // Layer 2: cool mid smoke
+      if (t > 0.25 && t <= 0.75) {
+        const localT = (t - 0.25) / 0.5;
+        const a = localT * (1 - localT) * 4 * 0.30;
+        const r = 4 + (1 - t) * 5;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(180,180,200,${a.toFixed(3)})`;
+        ctx.fill();
+      }
+
+      // Layer 3: fading old smoke
+      if (t <= 0.4) {
+        const a = (1 - t / 0.4) * 0.18;
+        const r = 5 + (1 - t) * 6;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(140,140,160,${a.toFixed(3)})`;
+        ctx.fill();
+      }
     }
 
     // Missile body (rotated context)
@@ -116,10 +149,40 @@ export class Missile extends Entity {
     ctx.translate(this.x, this.y);
     ctx.rotate(this.rotation);
 
+    // Body glow halo
     drawPoly(ctx, BODY_GLOW, rgba(0.4, 0.6, 1.0, 0.18));
-    drawPoly(ctx, BODY, rgba(0.78, 0.78, 0.82));
+
+    // Metallic gradient body — #D0D0D8 to #909098
+    ctx.save();
+    const bodyGrad = ctx.createLinearGradient(-11, -16, 11, 22);
+    bodyGrad.addColorStop(0, '#D8D8E0');
+    bodyGrad.addColorStop(0.45, '#C8C8D0');
+    bodyGrad.addColorStop(1, '#909098');
+    ctx.fillStyle = bodyGrad;
+    _polyPath(ctx, BODY);
+    ctx.fill();
+    ctx.restore();
+
+    // Blue stripe
     drawPoly(ctx, BODY_STRIPE, rgba(0.3, 0.45, 0.75));
-    drawPoly(ctx, NOSECONE, rgba(0.95, 0.15, 0.1));
+
+    // Nosecone — #F02010 with yellow tip dot
+    ctx.save();
+    const noseGrad = ctx.createLinearGradient(-11, -36, 11, -16);
+    noseGrad.addColorStop(0, '#FF3020');
+    noseGrad.addColorStop(1, '#C01808');
+    ctx.fillStyle = noseGrad;
+    _polyPath(ctx, NOSECONE);
+    ctx.fill();
+    ctx.restore();
+
+    // Yellow tip dot at apex
+    ctx.beginPath();
+    ctx.arc(0, -34, 3, 0, Math.PI * 2);
+    ctx.fillStyle = '#FFD020';
+    ctx.fill();
+
+    // Nose band and fins (metallic gray)
     drawPoly(ctx, NOSE_BAND, rgba(0.55, 0.55, 0.58));
     drawPoly(ctx, FIN_LEFT, rgba(0.55, 0.55, 0.58));
     drawPoly(ctx, FIN_RIGHT, rgba(0.55, 0.55, 0.58));

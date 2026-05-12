@@ -19,6 +19,8 @@ import { SuperMissile } from './entities/super-missile.js';
 import { Drone } from './entities/drone.js';
 import { SuicideDrone } from './entities/suicide-drone.js';
 import { Nuke } from './entities/nuke.js';
+import { TransportPlane } from './entities/transport-plane.js';
+import { Paratrooper } from './entities/paratrooper.js';
 import { rgba, lerp, randf, dist } from './utils.js';
 
 // Launcher spawn positions (from main.gd / SCENE_DATA)
@@ -29,7 +31,7 @@ const LAUNCHER_POSITIONS = [
   { x: 1900, y: 1220, Class: VulkanCannon },
 ];
 
-const CROSSHAIR_RADIUS = 50;
+const CROSSHAIR_RADIUS = 90;
 
 /**
  * Game — top-level controller. Creates engine systems, runs the game loop,
@@ -251,30 +253,84 @@ export class Game {
     if (this.state === 'start') {
       r.beginUI();
 
+      // Background: vertical gradient #020408 → #060A18 → #040608
+      const skyGrad = ctx.createLinearGradient(0, 0, 0, Renderer.LOGICAL_H);
+      skyGrad.addColorStop(0,   '#020408');
+      skyGrad.addColorStop(0.5, '#060A18');
+      skyGrad.addColorStop(1,   '#040608');
+      ctx.fillStyle = skyGrad;
+      ctx.fillRect(0, 0, Renderer.LOGICAL_W, Renderer.LOGICAL_H);
+
+      // Subtle scanline overlay
+      ctx.save();
+      for (let sy = 0; sy < Renderer.LOGICAL_H; sy += 4) {
+        ctx.fillStyle = 'rgba(0,0,0,0.08)';
+        ctx.fillRect(0, sy, Renderer.LOGICAL_W, 2);
+      }
+      ctx.restore();
+
       // Cover image — full-width marquee, centered on screen
       const img = this._coverImage;
       if (img.complete && img.naturalWidth > 0) {
         const imgW = 2200;
         const imgH = Math.round(imgW * img.naturalHeight / img.naturalWidth);
         const imgX = (Renderer.LOGICAL_W - imgW) / 2;
-        const imgY = (Renderer.LOGICAL_H - imgH) / 2; // vertically centered
+        const imgY = (Renderer.LOGICAL_H - imgH) / 2;
         ctx.drawImage(img, imgX, imgY, imgW, imgH);
       }
 
-      r.drawText(
-        'MISSILE ATTACK',
-        Renderer.LOGICAL_W / 2, 1150,
-        'bold 96px monospace',
-        rgba(1, 0.4, 0.2),
-        'center'
-      );
-      r.drawText(
-        'Click to start',
-        Renderer.LOGICAL_W / 2, 1300,
-        '48px monospace',
-        rgba(1, 1, 1, 0.6),
-        'center'
-      );
+      // Title: "MISSILE ATTACK" — glow pass then main text
+      const titleCx = Renderer.LOGICAL_W / 2;
+      const titleY = 1150;
+      ctx.save();
+      ctx.font = 'bold 112px monospace';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      // Glow pass — shadowBlur=40
+      ctx.shadowColor = '#FF5522';
+      ctx.shadowBlur = 40;
+      ctx.fillStyle = 'rgba(255,85,34,0.55)';
+      ctx.fillText('MISSILE ATTACK', titleCx, titleY);
+      // Main pass
+      ctx.shadowBlur = 8;
+      ctx.fillStyle = '#FF5522';
+      ctx.fillText('MISSILE ATTACK', titleCx, titleY);
+      ctx.shadowBlur = 0;
+      // Highlight pass at (1,-1)
+      ctx.globalAlpha = 0.2;
+      ctx.fillStyle = '#FFFFFF';
+      ctx.fillText('MISSILE ATTACK', titleCx + 1, titleY - 1);
+      ctx.restore();
+
+      // Pulsing "CLICK TO START"
+      const ctaAlpha = 0.5 + 0.5 * Math.sin(Date.now() * 0.0025);
+      const ctaY = 1300;
+      ctx.save();
+      ctx.font = '48px monospace';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillStyle = `rgba(255,255,255,${ctaAlpha.toFixed(2)})`;
+      ctx.fillText('CLICK TO START', titleCx, ctaY);
+      ctx.restore();
+
+      // Flanking horizontal lines around CTA
+      ctx.save();
+      ctx.strokeStyle = 'rgba(255,85,34,0.45)';
+      ctx.lineWidth = 1.5;
+      const lineY2 = ctaY;
+      const lineCx = titleCx;
+      const lineGap = 200; // gap from center to line start
+      const lineLen2 = 260;
+      ctx.beginPath();
+      ctx.moveTo(lineCx - lineGap - lineLen2, lineY2);
+      ctx.lineTo(lineCx - lineGap, lineY2);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(lineCx + lineGap, lineY2);
+      ctx.lineTo(lineCx + lineGap + lineLen2, lineY2);
+      ctx.stroke();
+      ctx.restore();
+
     } else if (this.state === 'playing' || this.state === 'gameover') {
       // Game world (with shake)
       this.entities.draw(ctx);
@@ -446,6 +502,7 @@ export class Game {
       case 'drone': this._spawnDrone(); break;
       case 'suicide_drone': this._spawnSuicideDrone(); break;
       case 'nuke': this._spawnNuke(); break;
+      case 'transport_plane': this._spawnTransportPlane(); break;
     }
   }
 
@@ -516,6 +573,18 @@ export class Game {
     this.audio.playNukeWarning(spawnX);
   }
 
+  _spawnTransportPlane() {
+    const fromLeft = Math.random() < 0.5;
+    const yPos = randf(100, 250);
+    const maxDrops = Math.floor(randf(3, 6));
+    const plane = new TransportPlane(fromLeft, yPos, maxDrops);
+    plane.onDropParatrooper = (x, y) => {
+      const trooper = new Paratrooper(x, y);
+      this.entities.add(trooper);
+    };
+    this.entities.add(plane);
+  }
+
   _onDroneBomb(x, y) {
     const bomb = new EnemyMissile(x, y);
     const targetX = x + randf(-30, 30);
@@ -527,7 +596,8 @@ export class Game {
   // ── Game events ────────────────────────────────────────────
 
   onEnemyDestroyed(type = 'normal') {
-    this.score += type === 'nuke' ? 5 : 1;
+    const points = { nuke: 5, transport_plane: 3, paratrooper: 2 };
+    this.score += points[type] || 1;
   }
 
   shakeScreen(intensity = 15.0) {

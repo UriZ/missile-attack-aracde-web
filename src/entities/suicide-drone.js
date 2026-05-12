@@ -200,18 +200,31 @@ export class SuicideDrone extends Entity {
       // Apply as tint — just draw body brighter
     }
 
-    // Dive body tint
-    let bodyTint = '';
+    // Body gradient #AA1A10 to #661008 per spec
+    ctx.save();
+    const bodyGrad = ctx.createLinearGradient(-40, 0, 42, 0);
+    bodyGrad.addColorStop(0, '#AA1A10');
+    bodyGrad.addColorStop(1, '#661008');
     if (this.state === STATE_DIVE) {
       const pulse = 0.5 + Math.sin(performance.now() * 0.025) * 0.5;
-      const r = Math.min(1, 0.65 + pulse * 0.4);
-      bodyTint = rgba(r, 0.10, 0.08);
-    } else {
-      bodyTint = rgba(0.65, 0.10, 0.08);
+      const brightness = Math.min(255, Math.round(170 + pulse * 85));
+      bodyGrad.addColorStop(0, `rgb(${brightness},26,16)`);
     }
+    ctx.fillStyle = bodyGrad;
+    ctx.beginPath();
+    ctx.moveTo(BODY[0], BODY[1]);
+    for (let i = 2; i < BODY.length; i += 2) ctx.lineTo(BODY[i], BODY[i+1]);
+    ctx.closePath(); ctx.fill();
+    ctx.restore();
 
-    drawPoly(ctx, BODY, bodyTint);
-    drawPoly(ctx, COCKPIT, rgba(1.0, 0.20, 0.05));
+    // Cockpit — #FF3311 with glow blur 10 per spec
+    ctx.save();
+    ctx.shadowColor = '#FF0000';
+    ctx.shadowBlur = 10;
+    drawPoly(ctx, COCKPIT, rgba(1.0, 0.20, 0.07));
+    ctx.shadowBlur = 0;
+    ctx.restore();
+
     drawPoly(ctx, UPPER_WING, rgba(0.50, 0.08, 0.06, 0.95));
     drawPoly(ctx, LOWER_WING, rgba(0.50, 0.08, 0.06, 0.95));
     drawPoly(ctx, TAIL_FIN, rgba(0.45, 0.08, 0.06));
@@ -220,10 +233,30 @@ export class SuicideDrone extends Entity {
     let glowAlpha;
     if (this.state === STATE_DIVE) {
       glowAlpha = 0.5 + Math.sin(performance.now() * 0.025) * 0.5;
+      // DIVE: white-hot engine per spec
+      ctx.save();
+      const engineA = glowAlpha;
+      ctx.fillStyle = `rgba(255,255,200,${(engineA * 0.9).toFixed(3)})`;
+      ctx.beginPath();
+      ctx.moveTo(ENGINE_GLOW[0], ENGINE_GLOW[1]);
+      for (let i = 2; i < ENGINE_GLOW.length; i += 2) ctx.lineTo(ENGINE_GLOW[i], ENGINE_GLOW[i+1]);
+      ctx.closePath(); ctx.fill();
+      ctx.restore();
     } else {
       glowAlpha = 0.5 + Math.sin(performance.now() * 0.007) * 0.35;
+      drawPoly(ctx, ENGINE_GLOW, rgba(1.0, 0.35, 0.0, glowAlpha));
     }
-    drawPoly(ctx, ENGINE_GLOW, rgba(1.0, 0.35, 0.0, glowAlpha));
+
+    // LOCK state: screen-edge red vignette hint near drone (local effect)
+    if (this.state === STATE_LOCK) {
+      ctx.save();
+      ctx.globalAlpha = 0.4;
+      ctx.strokeStyle = 'rgba(255,0,0,0.15)';
+      ctx.lineWidth = 12;
+      ctx.beginPath(); ctx.arc(0, 0, 60, 0, Math.PI * 2); ctx.stroke();
+      ctx.globalAlpha = 1;
+      ctx.restore();
+    }
 
     ctx.restore();
   }

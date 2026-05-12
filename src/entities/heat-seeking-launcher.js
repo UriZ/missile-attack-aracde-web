@@ -98,36 +98,148 @@ export class HeatSeekerLauncher extends Launcher {
     ctx.save();
     ctx.translate(this.x, this.y);
 
-    // Selection glow
+    // Selection glow — teal/cyan per spec
     if (this.isSelected) {
-      drawPoly(ctx, GLOW2, `rgba(26,179,255,${(this._glowAlpha * 0.43).toFixed(3)})`);
-      drawPoly(ctx, GLOW1, `rgba(26,179,255,${this._glowAlpha.toFixed(3)})`);
+      ctx.shadowColor = '#00DDFF';
+      ctx.shadowBlur = 20;
+      drawPoly(ctx, GLOW2, `rgba(0,200,255,${(this._glowAlpha * 0.28).toFixed(3)})`);
+      drawPoly(ctx, GLOW1, `rgba(0,200,255,${(this._glowAlpha * 0.55).toFixed(3)})`);
+      ctx.shadowBlur = 0;
     }
 
-    // Base polygons
-    for (const p of BASE_POLYS) {
-      drawPoly(ctx, p.pts, p.c);
-    }
+    // Base slab gradient
+    const baseGrad = ctx.createLinearGradient(0, 14, 0, 30);
+    baseGrad.addColorStop(0, '#2E3340');
+    baseGrad.addColorStop(1, '#161C2A');
+    ctx.fillStyle = baseGrad;
+    ctx.beginPath();
+    ctx.moveTo(-46, 28); ctx.lineTo(46, 28); ctx.lineTo(40, 14); ctx.lineTo(-40, 14);
+    ctx.closePath(); ctx.fill();
+    // Rim
+    ctx.fillStyle = '#0A0E18';
+    ctx.fillRect(-46, 28, 92, 2);
+    // 2px trim line cyan
+    ctx.fillStyle = 'rgba(26,192,255,0.9)';
+    ctx.fillRect(-40, 14, 80, 2);
+
+    // BaseUpper
+    const upperGrad = ctx.createLinearGradient(0, 4, 0, 14);
+    upperGrad.addColorStop(0, '#363D50');
+    upperGrad.addColorStop(1, '#222A3A');
+    ctx.fillStyle = upperGrad;
+    ctx.beginPath();
+    ctx.moveTo(-40, 14); ctx.lineTo(40, 14); ctx.lineTo(34, 4); ctx.lineTo(-34, 4);
+    ctx.closePath(); ctx.fill();
+    // Trim line
+    ctx.fillStyle = 'rgba(26,192,255,0.7)';
+    ctx.fillRect(-30, 5, 60, 1);
+
+    // Pivot
+    ctx.fillStyle = '#222A36';
+    ctx.fillRect(-30, -8, 60, 12);
 
     // Turret (rotated)
     ctx.save();
     ctx.rotate(this.turretRotation);
 
-    for (const p of TURRET_POLYS) {
-      drawPoly(ctx, p.pts, p.c);
+    // Mast with gradient
+    const mastGrad = ctx.createLinearGradient(-7, 0, 7, 0);
+    mastGrad.addColorStop(0, '#303850');
+    mastGrad.addColorStop(1, '#1A2035');
+    ctx.fillStyle = mastGrad;
+    ctx.fillRect(-7, -22, 14, 16);
+    ctx.fillRect(-4, -46, 8, 24);
+    // Mast sheen
+    ctx.fillStyle = 'rgba(80,110,160,0.5)';
+    ctx.fillRect(-4, -46, 2, 24);
+
+    // Status light
+    ctx.save();
+    ctx.shadowColor = '#00FF44';
+    ctx.shadowBlur = 8;
+    ctx.fillStyle = '#19FF66';
+    ctx.beginPath(); ctx.arc(0, -19, 2.5, 0, Math.PI * 2); ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.restore();
+
+    // Tubes
+    for (const side of [-1, 1]) {
+      const tx = side === -1 ? -40 : 28;
+      const tw = 12;
+      // Tube body gradient
+      const tubeGrad = ctx.createLinearGradient(tx, 0, tx + tw, 0);
+      tubeGrad.addColorStop(0, side === -1 ? '#303850' : '#303850');
+      tubeGrad.addColorStop(side === -1 ? 1 : 0, '#1A2035');
+      ctx.fillStyle = tubeGrad;
+      ctx.fillRect(tx, -50, tw, 42);
+      // Sheen
+      ctx.fillStyle = 'rgba(80,100,140,0.5)';
+      ctx.fillRect(side === -1 ? tx : tx + 10, -50, 2, 42);
+      // Flange
+      ctx.fillStyle = '#181C2A';
+      ctx.fillRect(tx - 3, -9, tw + 6, 3);
+      // Missile in tube
+      const mx = tx + 3;
+      ctx.fillStyle = '#882818';
+      ctx.fillRect(mx, -48, 6, 36);
+      ctx.fillStyle = 'rgba(255,160,120,0.2)';
+      ctx.fillRect(mx, -48, 2, 36);
+      // Tip
+      ctx.fillStyle = '#EEEADE';
+      ctx.beginPath();
+      ctx.moveTo(mx, -48); ctx.lineTo(mx + 3, -54); ctx.lineTo(mx + 6, -48);
+      ctx.closePath(); ctx.fill();
+      // Band
+      ctx.fillStyle = '#E8D810';
+      ctx.fillRect(mx, -32, 6, 4);
     }
 
     // Radar dish — positioned at (0, -46), with independent rotation
     ctx.save();
     ctx.translate(0, -46);
     ctx.rotate(this.radarRotation);
-    for (const p of RADAR_POLYS) {
-      drawPoly(ctx, p.pts, p.c);
-    }
+
+    // Radar arm
+    ctx.fillStyle = '#363E50';
+    ctx.fillRect(-2, -8, 4, 8);
+
+    // Dish back
+    ctx.fillStyle = '#1A2230';
+    ctx.beginPath();
+    ctx.moveTo(-30, -8); ctx.bezierCurveTo(-30, -8, -15, -28, 0, -28); ctx.bezierCurveTo(15, -28, 30, -8, 30, -8);
+    ctx.closePath(); ctx.fill();
+
+    // Dish face gradient
+    const dishGrad = ctx.createLinearGradient(0, -27, 0, -9);
+    dishGrad.addColorStop(0, '#1A75C0');
+    dishGrad.addColorStop(1, '#0D3D70');
+    ctx.fillStyle = dishGrad;
+    ctx.beginPath();
+    ctx.moveTo(-28, -9); ctx.bezierCurveTo(-20, -22, -9, -26, 0, -27); ctx.bezierCurveTo(9, -26, 20, -22, 28, -9);
+    ctx.closePath(); ctx.fill();
+
+    // Dish inner
+    ctx.fillStyle = 'rgba(30,150,220,0.75)';
+    ctx.beginPath();
+    ctx.moveTo(-18, -11); ctx.lineTo(-11, -21); ctx.lineTo(0, -24); ctx.lineTo(11, -21); ctx.lineTo(18, -11);
+    ctx.closePath(); ctx.fill();
+
+    // Center glow
+    ctx.save();
+    ctx.shadowColor = '#00FFEE';
+    ctx.shadowBlur = 12;
+    ctx.fillStyle = 'rgba(25,255,240,0.9)';
+    ctx.beginPath(); ctx.arc(0, -17, 7, 0, Math.PI * 2); ctx.fill();
+    ctx.shadowBlur = 0;
     ctx.restore();
 
-    ctx.restore(); // turret rotation
+    // Dish core
+    ctx.fillStyle = '#66FFFF';
+    ctx.beginPath(); ctx.arc(0, -17, 2, 0, Math.PI * 2); ctx.fill();
 
+    ctx.restore(); // radar rotation
+
+    ctx.restore(); // turret rotation
     ctx.restore(); // entity position
   }
 }

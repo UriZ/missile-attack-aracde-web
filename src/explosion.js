@@ -57,7 +57,7 @@ export class Explosion extends Entity {
   // -----------------------------------------------------------------------
 
   _spawnDebrisChunks() {
-    const count = this.isMega ? 22 : 12;
+    const count = this.isMega ? 26 : 14;
     const chunks = [];
     const colorOptions = [
       { r: 0.5, g: 0.4, b: 0.3 },   // rock/dirt
@@ -101,26 +101,29 @@ export class Explosion extends Entity {
   }
 
   _spawnSparkTrails() {
-    const count = this.isMega ? 16 : 8;
+    const count = this.isMega ? 20 : 10;
     const colorOptions = [
       { r: 1, g: 0.9, b: 0.4 },
       { r: 1, g: 0.7, b: 0.2 },
       { r: 1, g: 0.5, b: 0.1 },
+      { r: 1, g: 1.0, b: 1.0 }, // white sparks (20%)
     ];
     const sparks = [];
     for (let i = 0; i < count; i++) {
       const angle = randf(0, TAU);
       const speed = this.isMega ? randf(200, 550) : randf(150, 400);
+      // 20% white sparks
+      const colorIdx = Math.random() < 0.2 ? 3 : randi(0, 2);
       sparks.push({
         px: 0, py: 0,
         vx: Math.cos(angle) * speed,
         vy: Math.sin(angle) * speed + randf(-120, -30),
         trailPoints: [], // {x,y}
-        maxTrail: randi(6, 14),
+        maxTrail: randi(10, 20), // longer trails: 10-20 segments
         lifetime: randf(0.4, 1.0),
         age: 0,
         brightness: randf(0.7, 1.0),
-        color: pickRandom(colorOptions),
+        color: colorOptions[colorIdx],
       });
     }
     return sparks;
@@ -149,7 +152,7 @@ export class Explosion extends Entity {
   }
 
   _spawnSmokeWisps() {
-    const count = this.isMega ? 9 : 5;
+    const count = this.isMega ? 12 : 7;
     const wisps = [];
     for (let i = 0; i < count; i++) {
       const angle = randf(0, TAU);
@@ -310,43 +313,63 @@ export class Explosion extends Entity {
       ctx.fill();
     }
 
-    // === Fireball glow (layered circles) ===
+    // === Fireball glow (5-layer circles with blue-white core) ===
     if (this.glowAlpha > 0.01 && this.fireballRadius > 1) {
       const outerR = this.fireballRadius * 1.3;
-      // Outer glow
+      // Layer 1: outer orange haze — rgba(255,70,0,0.38)
       ctx.beginPath();
       ctx.arc(hs * 0.3, 0, outerR, 0, TAU);
-      ctx.fillStyle = `rgba(255,102,13,${(this.glowAlpha * 0.3).toFixed(3)})`;
+      ctx.fillStyle = `rgba(255,70,0,${(this.glowAlpha * 0.38).toFixed(3)})`;
       ctx.fill();
-      // Mid glow
+      // Layer 2: mid orange — rgba(255,140,20,0.58)
       ctx.beginPath();
       ctx.arc(-hs * 0.2, hs * 0.1, this.fireballRadius, 0, TAU);
-      ctx.fillStyle = `rgba(255,166,26,${(this.glowAlpha * 0.5).toFixed(3)})`;
+      ctx.fillStyle = `rgba(255,140,20,${(this.glowAlpha * 0.58).toFixed(3)})`;
       ctx.fill();
-      // Inner glow
-      const innerR = this.fireballRadius * 0.5;
+      // Layer 3: inner yellow — rgba(255,220,100,0.85)
+      const innerR = this.fireballRadius * 0.55;
       ctx.beginPath();
       ctx.arc(hs * 0.15, -hs * 0.1, innerR, 0, TAU);
-      ctx.fillStyle = `rgba(255,230,128,${(this.glowAlpha * 0.8).toFixed(3)})`;
+      ctx.fillStyle = `rgba(255,220,100,${(this.glowAlpha * 0.85).toFixed(3)})`;
       ctx.fill();
-      // Center white-hot
-      const centerR = this.fireballRadius * 0.2;
+      // Layer 4: center white — rgba(255,255,255,0.95)
+      const centerR = this.fireballRadius * 0.25;
       ctx.beginPath();
       ctx.arc(0, 0, centerR, 0, TAU);
-      ctx.fillStyle = `rgba(255,255,230,${(this.glowAlpha * 0.9).toFixed(3)})`;
+      ctx.fillStyle = `rgba(255,255,255,${(this.glowAlpha * 0.95).toFixed(3)})`;
       ctx.fill();
+      // Layer 5: blue-white core at 5% radius — rgba(200,220,255,0.9)
+      const coreR = this.fireballRadius * 0.05;
+      if (coreR > 1) {
+        ctx.beginPath();
+        ctx.arc(0, 0, coreR, 0, TAU);
+        ctx.fillStyle = `rgba(200,220,255,${(this.glowAlpha * 0.9).toFixed(3)})`;
+        ctx.fill();
+      }
     }
 
-    // === Shockwave ring ===
+    // === Double shockwave ring ===
     if (this.shockwaveRadius > 5) {
       const shockProgress = this.shockwaveRadius / this.shockwaveMaxRadius;
       const ringAlpha = (1 - shockProgress) * 0.4;
-      const ringWidth = this.isMega ? 5 : 3;
+      // Primary shockwave — 8px mega, 4px normal
+      const primaryWidth = this.isMega ? 8 : 4;
       ctx.beginPath();
       ctx.arc(0, 0, this.shockwaveRadius, 0, TAU);
       ctx.strokeStyle = `rgba(255,217,128,${ringAlpha.toFixed(3)})`;
-      ctx.lineWidth = ringWidth;
+      ctx.lineWidth = primaryWidth;
       ctx.stroke();
+      // Secondary shockwave at 0.7x radius, 50% alpha
+      const secondaryR = this.shockwaveRadius * 0.7;
+      if (secondaryR > 5) {
+        const secondaryAlpha = ringAlpha * 0.5;
+        const secondaryWidth = this.isMega ? 4 : 2.5;
+        ctx.beginPath();
+        ctx.arc(0, 0, secondaryR, 0, TAU);
+        ctx.strokeStyle = `rgba(255,200,100,${secondaryAlpha.toFixed(3)})`;
+        ctx.lineWidth = secondaryWidth;
+        ctx.stroke();
+      }
     }
 
     // === Secondary pops ===
@@ -372,7 +395,7 @@ export class Explosion extends Entity {
       }
     }
 
-    // === Debris chunk smoke trails ===
+    // === Debris chunk smoke trails + yellow tail streaks ===
     for (const chunk of this.debrisChunks) {
       const trail = chunk.trail;
       if (trail.length >= 2) {
@@ -391,6 +414,20 @@ export class Explosion extends Entity {
             ctx.lineWidth = 2;
           }
           ctx.stroke();
+        }
+        // Yellow tail streak on recent trail segment
+        if (trail.length >= 3) {
+          const lastIdx = trail.length - 1;
+          const prevIdx = trail.length - 3;
+          const streakAlpha = (1 - progress) * 0.65;
+          if (streakAlpha > 0.01) {
+            ctx.beginPath();
+            ctx.moveTo(trail[prevIdx].x, trail[prevIdx].y);
+            ctx.lineTo(trail[lastIdx].x, trail[lastIdx].y);
+            ctx.strokeStyle = `rgba(255,220,50,${streakAlpha.toFixed(3)})`;
+            ctx.lineWidth = chunk.onFire ? 2 : 1;
+            ctx.stroke();
+          }
         }
       }
     }
@@ -513,7 +550,8 @@ export class Explosion extends Entity {
     }
 
     // === Smoke wisps rising from blast site ===
-    for (const wisp of this.smokeWisps) {
+    for (let wi = 0; wi < this.smokeWisps.length; wi++) {
+      const wisp = this.smokeWisps[wi];
       if (this.elapsed < wisp.delay) continue;
       const wispAge = this.elapsed - wisp.delay;
       const wispAlpha = wisp.alpha * clamp(1 - progress * 1.3, 0, 1);
@@ -521,18 +559,26 @@ export class Explosion extends Entity {
       const bx = wisp.baseX + Math.sin(wispAge * 2.5 + wisp.wobblePhase) * wisp.driftX;
       const by = wisp.baseY - wispAge * wisp.riseSpeed;
       const ws = wisp.size + wispAge * 6;
+      // Alternate between lighter and darker smoke variants
+      const isDark = wi % 3 === 2;
       // Overlapping translucent circles
       ctx.beginPath();
       ctx.arc(bx, by, ws, 0, TAU);
-      ctx.fillStyle = `rgba(64,56,51,${(wispAlpha * 0.5).toFixed(3)})`;
+      ctx.fillStyle = isDark
+        ? `rgba(38,34,30,${(wispAlpha * 0.55).toFixed(3)})`
+        : `rgba(64,56,51,${(wispAlpha * 0.5).toFixed(3)})`;
       ctx.fill();
       ctx.beginPath();
       ctx.arc(bx + ws * 0.3, by - ws * 0.2, ws * 0.7, 0, TAU);
-      ctx.fillStyle = `rgba(77,69,61,${(wispAlpha * 0.35).toFixed(3)})`;
+      ctx.fillStyle = isDark
+        ? `rgba(48,42,38,${(wispAlpha * 0.38).toFixed(3)})`
+        : `rgba(77,69,61,${(wispAlpha * 0.35).toFixed(3)})`;
       ctx.fill();
       ctx.beginPath();
       ctx.arc(bx - ws * 0.2, by - ws * 0.4, ws * 0.5, 0, TAU);
-      ctx.fillStyle = `rgba(56,51,46,${(wispAlpha * 0.25).toFixed(3)})`;
+      ctx.fillStyle = isDark
+        ? `rgba(30,26,22,${(wispAlpha * 0.28).toFixed(3)})`
+        : `rgba(56,51,46,${(wispAlpha * 0.25).toFixed(3)})`;
       ctx.fill();
     }
 
