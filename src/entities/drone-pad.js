@@ -3,13 +3,14 @@
  * Deploys HunterDrone entities. No turret rotation — drones self-guide.
  *
  * Key '5', position x=2200.
- * Max 2 active drones, 3s cooldown between deploys.
+ * Stock of 5 drones total, max 2 active at a time, 3s cooldown between deploys.
  */
 
 import { Launcher, drawPoly } from './launcher.js';
 import { TAU } from '../utils.js';
 
 const MAX_ACTIVE_DRONES = 2;
+const MAX_STOCK         = 5;
 const DEPLOY_COOLDOWN   = 3.0; // seconds
 
 // ── Visual geometry (local coords, all y is negative = upward) ───────────────
@@ -50,12 +51,18 @@ export class DronePad extends Launcher {
     this.deployCooldown = 0;
     this.activeDroneCount = 0;
 
+    // Stock: total drones remaining (5 at start)
+    this.stock = MAX_STOCK;
+
     // Launch arm tilt animation
     this._armTilt = 0;       // 0 = upright, positive = tilted back
     this._armTiltTarget = 0;
 
     // Rail glow pulse
     this._railGlowPhase = 0;
+
+    // Blink timer for EMPTY text
+    this._emptyBlinkTimer = 0;
   }
 
   /** @param {number} dt */
@@ -80,6 +87,9 @@ export class DronePad extends Launcher {
     if (this._armTiltTarget > 0 && Math.abs(this._armTilt - this._armTiltTarget) < 0.01) {
       this._armTiltTarget = 0; // let it spring back to 0
     }
+
+    // Blink timer for EMPTY text
+    this._emptyBlinkTimer += dt;
   }
 
   /**
@@ -88,6 +98,7 @@ export class DronePad extends Launcher {
    */
   canDeploy() {
     return this.alive &&
+           this.stock > 0 &&
            this.activeDroneCount < MAX_ACTIVE_DRONES &&
            this.deployCooldown <= 0;
   }
@@ -97,6 +108,7 @@ export class DronePad extends Launcher {
    */
   onDroneDeployed() {
     this.activeDroneCount++;
+    this.stock = Math.max(0, this.stock - 1);
     this.deployCooldown = DEPLOY_COOLDOWN;
     // Kick the arm animation
     this._armTiltTarget = 0.28; // ~16 degrees
@@ -157,6 +169,15 @@ export class DronePad extends Launcher {
     ctx.fillRect(-36, 2, 3, 10);
     ctx.fillRect( 33, 2, 3, 10);
 
+    // ── DPL-5 badge on pad side ──────────────────────────────────────────────
+    ctx.save();
+    ctx.font = '14px monospace';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = 'rgba(0,207,255,0.45)';
+    ctx.fillText('DPL-5', 0, BASE_H_TOP + 8);
+    ctx.restore();
+
     // ── Launch arm (tilts back on deploy) ──────────────────────────────────────
     ctx.save();
     ctx.rotate(-this._armTilt); // arm tilts backward (negative x direction)
@@ -197,25 +218,90 @@ export class DronePad extends Launcher {
 
     ctx.restore(); // arm tilt
 
-    // ── Active drone counter (3 indicator dots, right side of base) ───────────
-    const available = MAX_ACTIVE_DRONES - this.activeDroneCount;
-    for (let i = 0; i < MAX_ACTIVE_DRONES; i++) {
-      const dotX = 42;
-      const dotY = BASE_H_TOP - 5 - i * 11;
-      const active = i < available;
+    // ── Stock indicator: 5 mini drone silhouettes (right side of arm) ────────
+    // Place icons along the right side of the arm, from -48 up to -12 (above pedestal)
+    const stockSlotSpacing = 10;
+    const stockStartY = -(ARM_H * 0.85) + (MAX_STOCK - 1) * stockSlotSpacing / 2;
+
+    for (let i = 0; i < MAX_STOCK; i++) {
+      const dotX = 22;   // just right of the arm (ARM_X + ARM_W/2 + ~14)
+      const dotY = stockStartY + i * stockSlotSpacing;
+      const available = i < this.stock;
+
       ctx.save();
-      if (active) {
+      ctx.translate(dotX, dotY);
+
+      if (available) {
+        // Available: green arrowhead silhouette with glow
+        ctx.save();
         ctx.shadowColor = '#00FF88';
-        ctx.shadowBlur = 6;
+        ctx.shadowBlur = 5;
         ctx.fillStyle = '#00FF88';
+        // Diamond/arrowhead shape (nose pointing right)
+        ctx.beginPath();
+        ctx.moveTo(5, 0);   // nose
+        ctx.lineTo(-2, -4); // top
+        ctx.lineTo(-5, 0);  // tail
+        ctx.lineTo(-2, 4);  // bottom
+        ctx.closePath();
+        ctx.fill();
+        ctx.shadowBlur = 0;
+        ctx.restore();
       } else {
+        // Consumed: dim outline only
         ctx.fillStyle = '#1A3A2A';
+        ctx.beginPath();
+        ctx.moveTo(5, 0);
+        ctx.lineTo(-2, -4);
+        ctx.lineTo(-5, 0);
+        ctx.lineTo(-2, 4);
+        ctx.closePath();
+        ctx.fill();
       }
-      ctx.beginPath();
-      ctx.arc(dotX, dotY, 4, 0, TAU);
-      ctx.fill();
-      ctx.shadowBlur = 0;
+
       ctx.restore();
+    }
+
+    // ── Warning amber triangle when stock === 1 ────────────────────────────────
+    if (this.stock === 1) {
+      const warnPulse = 0.5 + 0.5 * Math.sin(this._railGlowPhase * 2);
+      ctx.save();
+      ctx.globalAlpha = 0.6 + 0.4 * warnPulse;
+      ctx.fillStyle = '#FFB800';
+      ctx.beginPath();
+      // Small triangle above the stock indicators
+      const tx2 = 22;
+      const ty2 = stockStartY - 14;
+      ctx.moveTo(tx2, ty2 - 8);
+      ctx.lineTo(tx2 + 7, ty2 + 4);
+      ctx.lineTo(tx2 - 7, ty2 + 4);
+      ctx.closePath();
+      ctx.fill();
+      // "!" inside triangle
+      ctx.fillStyle = '#1A0000';
+      ctx.font = 'bold 8px monospace';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('!', tx2, ty2 - 1);
+      ctx.globalAlpha = 1;
+      ctx.restore();
+    }
+
+    // ── EMPTY text when stock === 0 ───────────────────────────────────────────
+    if (this.stock === 0) {
+      const blinkOn = Math.floor(this._emptyBlinkTimer / 0.4) % 2 === 0;
+      if (blinkOn) {
+        ctx.save();
+        ctx.font = 'bold 11px monospace';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillStyle = '#FF3333';
+        ctx.shadowColor = '#FF0000';
+        ctx.shadowBlur = 6;
+        ctx.fillText('EMPTY', 22, stockStartY - 14);
+        ctx.shadowBlur = 0;
+        ctx.restore();
+      }
     }
 
     // ── Cooldown arc (when on cooldown) ───────────────────────────────────────

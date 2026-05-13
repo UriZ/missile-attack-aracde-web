@@ -188,12 +188,15 @@ const NEAR_CLOUD_COUNT = 3;
 function _makeCloudLayer(count, yMin, yMax, wMin, wMax, speed) {
   const clouds = [];
   for (let i = 0; i < count; i++) {
+    const maxBlobs = Math.floor(wMax / 80) + 3;
     clouds.push({
       x:     Math.random() * LOGICAL_W * 1.4 - LOGICAL_W * 0.2,
       y:     yMin + Math.random() * (yMax - yMin),
       w:     wMin + Math.random() * (wMax - wMin),
       h:     (wMin * 0.35) + Math.random() * ((wMax - wMin) * 0.25),
       speed,
+      alphaJitter:  Math.random() * 0.1,
+      blobJitters:  Array.from({length: maxBlobs}, () => Math.random()),
     });
   }
   return clouds;
@@ -521,11 +524,11 @@ export class DayNightCycle {
     ctx.save();
 
     // Far clouds — lighter, more transparent
-    const farAlpha = lerp(0.12, 0.25, 1 - starsAlpha);
+    const farAlpha = lerp(0.08, 0.16, 1 - starsAlpha);
     this._drawCloudLayer(ctx, _farClouds, skyBottom, farAlpha, 0.85);
 
     // Near clouds — denser, slightly darker
-    const nearAlpha = lerp(0.15, 0.30, 1 - starsAlpha);
+    const nearAlpha = lerp(0.10, 0.20, 1 - starsAlpha);
     const ambient = this._sample('ambient');
     // Near cloud color: blend sky_bottom with ambient
     const nearColor = [
@@ -578,7 +581,7 @@ export class DayNightCycle {
     const b = (color[2] * 255) | 0;
 
     for (const c of clouds) {
-      const a = alpha * (alphaVariance + (1 - alphaVariance) * Math.random() * 0.1);
+      const a = alpha * (alphaVariance + (1 - alphaVariance) * c.alphaJitter);
       ctx.globalAlpha = clamp(a, 0, 1);
 
       // Draw cloud as overlapping ellipses
@@ -590,7 +593,7 @@ export class DayNightCycle {
       for (let i = 0; i < blobs; i++) {
         const bx = c.x + i * stepX;
         const by = c.y + Math.sin(i * 1.3) * c.h * 0.3;
-        const bw = stepX * (0.8 + Math.random() * 0.3);
+        const bw = stepX * (0.8 + c.blobJitters[i % c.blobJitters.length] * 0.3);
         const bh = c.h * (0.7 + Math.sin(i * 2.1) * 0.2);
 
         ctx.beginPath();

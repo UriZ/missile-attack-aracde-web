@@ -497,8 +497,9 @@ export class UI {
       case 'drone_pad': {
         const drones = sel.activeDroneCount || 0;
         const maxD = 2;
+        const stock = sel.stock !== undefined ? sel.stock : 5;
         const cd = sel.deployCooldown > 0 ? ` (cooldown ${sel.deployCooldown.toFixed(1)}s)` : '';
-        return `HUNTER — Click to deploy autonomous drone   [${drones}/${maxD} active]${cd}`;
+        return `HUNTER — Click to deploy autonomous drone   [${drones}/${maxD} active]  stock:[${stock}]${cd}`;
       }
       default:
         return '';
@@ -633,6 +634,16 @@ export class UI {
       ctx.textBaseline = 'bottom';
       ctx.fillStyle = 'rgba(217,64,51,0.9)';
       ctx.fillText('DESTROYED', x + w - 10, y + h - 8);
+    }
+
+    // Stock count for HUNTER drone pad
+    if (slot.type === 'drone_pad' && isAlive && launcher) {
+      const stock = launcher.stock !== undefined ? launcher.stock : 5;
+      ctx.font = 'bold 18px monospace';
+      ctx.textAlign = 'right';
+      ctx.textBaseline = 'bottom';
+      ctx.fillStyle = stock > 0 ? 'rgba(0,255,136,0.85)' : 'rgba(255,50,50,0.9)';
+      ctx.fillText(`[${stock}]`, x + w - 10, y + h - 8);
     }
 
     ctx.restore();

@@ -2,6 +2,9 @@
  * HunterDrone — autonomous player-launched combat drone.
  * 5-state AI: LAUNCH → SEARCH → PURSUE → ATTACK → EXPIRE
  * Group: player_missiles (collision with enemies handled in collision.js)
+ *
+ * Visual: Switchblade 300-inspired tube fuselage with folding swept-delta wings.
+ * Wings deploy via easeOutBack animation during LAUNCH phase (0.4s).
  */
 
 import { Entity } from './entity.js';
@@ -28,6 +31,24 @@ const ATTACK_RANGE     = 400;   // px — switch PURSUE → ATTACK
 const SEARCH_ORBIT_R   = 260;   // radius of patrol orbit in SEARCH
 const EXPIRE_FADE      = 1.5;   // seconds to fade during EXPIRE
 
+// ── Wing animation ────────────────────────────────────────────────────────────
+const WING_DEPLOY_DURATION = 0.4;  // seconds to fully deploy wings
+const MAX_WING_ANGLE = 0.663;      // 38 degrees in radians
+
+// easeOutBack constants
+const _C1 = 1.70158;
+const _C3 = _C1 + 1;
+
+/**
+ * easeOutBack: overshoots then settles. t in [0,1] → value in [0,~1.07]
+ * @param {number} t
+ * @returns {number}
+ */
+function easeOutBack(t) {
+  const tc = t - 1;
+  return 1 + _C3 * tc * tc * tc + _C1 * tc * tc;
+}
+
 // ── Target priority weights ───────────────────────────────────────────────────
 const PRIORITY = {
   Nuke:         10,
@@ -42,29 +63,16 @@ function targetPriority(e) {
   return PRIORITY[e.constructor.name] || 3;
 }
 
-// ── Flying-wing silhouette polygons (local coords, nose pointing right = 0°) ──
-// The visual is drawn with nose along +X; heading angle rotates the whole shape.
+// ── Fuselage geometry (nose pointing right = 0°) ──────────────────────────────
+// Switchblade 300-inspired tube: narrow body, blunt nose
+const FUSELAGE_PTS = [-20,-3, 10,-3, 22,-2, 28,0, 22,2, 10,3, -20,3];
 
-// Hull — wide swept-wing, 70px span, 28px chord
-const HULL_PTS  = [-14, 0,  -35, -6, -35, 6,  // tail left/right
-                   -8, -10, 14, -14, 35, -8,    // left wing leading edge
-                   42, 0,                         // nose
-                   35, 8,  14, 14,  -8, 10       // right wing
-                  ];
+// Sensor dome (nose)
+const DOME_X = 28;
+const DOME_R = 4;
 
-// Wing underside shading (darker)
-const WING_DARK = [-14, 0, -35, 6, -8, 10, 14, 14, 35, 8, 42, 0, 28, 2];
-
-// Engine glow pods (twin) — placed at wing roots
-const ENG_L = [-4, -13, 4, -13, 4, -9, -4, -9];
-const ENG_R = [-4, 13,  4, 13,  4, 9,  -4, 9 ];
-
-// Sensor dome — small circle at nose
-const DOME_X = 38;
-const DOME_R = 5;
-
-// Kill counter LED positions (3 lights on left wing)
-const LEDS = [[-10, -8], [0, -12], [10, -15]];
+// Kill counter LED positions (3 lights on fuselage top)
+const LEDS = [[-12, -5], [-2, -5], [8, -5]];
 
 export class HunterDrone extends Entity {
   /**
@@ -107,6 +115,10 @@ export class HunterDrone extends Entity {
 
     // Engine glow pulse
     this._glowPhase = Math.random() * TAU;
+
+    // Wing deployment animation (0→1 over WING_DEPLOY_DURATION)
+    this._wingDeployT = 0;
+    this._wingsDeployed = false;
   }
 
   // ── Public ──────────────────────────────────────────────────────────────────
@@ -162,6 +174,14 @@ export class HunterDrone extends Entity {
     this.x += this.vx * dt;
     this.y += this.vy * dt;
     this.heading = -Math.PI / 2;
+
+    // Tick wing deployment
+    if (!this._wingsDeployed) {
+      this._wingDeployT = Math.min(1, this._wingDeployT + dt / WING_DEPLOY_DURATION);
+      if (this._wingDeployT >= 1) {
+        this._wingsDeployed = true;
+      }
+    }
 
     if (this.stateTimer >= LAUNCH_DURATION) {
       this._orbitCx = this.x;
@@ -291,73 +311,151 @@ export class HunterDrone extends Entity {
     ctx.translate(this.x, this.y);
     ctx.rotate(this.heading);
 
-    // ── Hull ──────────────────────────────────────────────────────────────────
-    const hullGrad = ctx.createLinearGradient(-35, -14, 42, 14);
-    hullGrad.addColorStop(0, '#0D1F30');
-    hullGrad.addColorStop(0.5, '#1A2E4A');
-    hullGrad.addColorStop(1, '#0A1820');
-    ctx.fillStyle = hullGrad;
+    // ── Wings ─────────────────────────────────────────────────────────────────
+    // Wing animation: t=0 folded (pressed against body), t=1 fully deployed
+    const deployT = Math.min(1, this._wingDeployT);
+    const eased   = deployT < 1 ? easeOutBack(deployT) : 1;
+    // Clamp eased to avoid crazy values at very start
+    const wingAngle = Math.max(0, Math.min(MAX_WING_ANGLE * 1.15, MAX_WING_ANGLE * eased));
+
+    // Snap flash effect: cyan highlight at overshoot peak (t 0.72–0.95)
+    const inSnapWindow = deployT >= 0.72 && deployT <= 0.95;
+    const snapFlashAlpha = inSnapWindow
+      ? Math.sin((deployT - 0.72) / (0.95 - 0.72) * Math.PI) * 0.8
+      : 0;
+
+    // Wing gradient (root to tip: lighter to darker)
+    const wingGrad = ctx.createLinearGradient(0, 0, 0, 38);
+    wingGrad.addColorStop(0, '#7A8A6A');
+    wingGrad.addColorStop(1, '#4A5440');
+
+    // Upper wing (port, negative Y in local space)
+    ctx.save();
+    ctx.translate(-5, 0); // pivot near wing root on fuselage
+    ctx.rotate(-wingAngle); // rotate upward
+    ctx.fillStyle = wingGrad;
     ctx.beginPath();
-    ctx.moveTo(HULL_PTS[0], HULL_PTS[1]);
-    for (let i = 2; i < HULL_PTS.length; i += 2) ctx.lineTo(HULL_PTS[i], HULL_PTS[i + 1]);
+    // Swept delta wing: root at body, tip extending outward
+    ctx.moveTo(0, 0);
+    ctx.lineTo(-18, -38);
+    ctx.lineTo(16, -8);
     ctx.closePath();
     ctx.fill();
 
-    // Wing underside darker
-    ctx.fillStyle = 'rgba(5,12,22,0.55)';
-    ctx.beginPath();
-    ctx.moveTo(WING_DARK[0], WING_DARK[1]);
-    for (let i = 2; i < WING_DARK.length; i += 2) ctx.lineTo(WING_DARK[i], WING_DARK[i + 1]);
-    ctx.closePath();
-    ctx.fill();
-
-    // Wing edge highlight — thin cyan trim
-    ctx.strokeStyle = 'rgba(0,207,255,0.45)';
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.moveTo(-35, -6);
-    ctx.lineTo(14, -14);
-    ctx.lineTo(42, 0);
-    ctx.lineTo(14, 14);
-    ctx.lineTo(-35, 6);
-    ctx.stroke();
-
-    // ── Engine glow pods ──────────────────────────────────────────────────────
-    const glowPulse = 0.6 + Math.sin(this._glowPhase) * 0.4;
-    const engineColor = `rgba(0,207,255,${(glowPulse * 0.9).toFixed(3)})`;
-
-    for (const pod of [ENG_L, ENG_R]) {
+    // Snap flash: cyan highlight on leading edge
+    if (snapFlashAlpha > 0.01) {
       ctx.save();
-      ctx.shadowColor = '#00CFFF';
-      ctx.shadowBlur = 12;
-      ctx.fillStyle = engineColor;
+      ctx.strokeStyle = `rgba(0,255,255,${snapFlashAlpha.toFixed(3)})`;
+      ctx.lineWidth = 2;
       ctx.beginPath();
-      ctx.moveTo(pod[0], pod[1]);
-      for (let i = 2; i < pod.length; i += 2) ctx.lineTo(pod[i], pod[i + 1]);
-      ctx.closePath();
-      ctx.fill();
-      ctx.shadowBlur = 0;
+      ctx.moveTo(0, 0);
+      ctx.lineTo(-18, -38);
+      ctx.stroke();
       ctx.restore();
     }
+    ctx.restore();
 
-    // Engine exhaust trail
-    const exhaustA = glowPulse * 0.6;
-    for (let i = 0; i < 4; i++) {
-      const ex = -14 - i * 9;
-      const alpha = exhaustA * (1 - i / 4);
+    // Lower wing (starboard, positive Y in local space)
+    const wingGrad2 = ctx.createLinearGradient(0, 0, 0, 38);
+    wingGrad2.addColorStop(0, '#7A8A6A');
+    wingGrad2.addColorStop(1, '#4A5440');
+    ctx.save();
+    ctx.translate(-5, 0);
+    ctx.rotate(wingAngle); // rotate downward
+    ctx.fillStyle = wingGrad2;
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.lineTo(-18, 38);
+    ctx.lineTo(16, 8);
+    ctx.closePath();
+    ctx.fill();
+
+    // Snap flash: lower wing
+    if (snapFlashAlpha > 0.01) {
+      ctx.save();
+      ctx.strokeStyle = `rgba(0,255,255,${snapFlashAlpha.toFixed(3)})`;
+      ctx.lineWidth = 2;
       ctx.beginPath();
-      ctx.arc(ex, (Math.random() - 0.5) * 6, randf(1.5, 3.5), 0, TAU);
+      ctx.moveTo(0, 0);
+      ctx.lineTo(-18, 38);
+      ctx.stroke();
+      ctx.restore();
+    }
+    ctx.restore();
+
+    // ── Tail fins (V-tail) ─────────────────────────────────────────────────────
+    ctx.fillStyle = '#4A5238';
+    // Upper tail fin
+    ctx.beginPath();
+    ctx.moveTo(-20, -2);
+    ctx.lineTo(-28, -14);
+    ctx.lineTo(-16, -3);
+    ctx.closePath();
+    ctx.fill();
+    // Lower tail fin
+    ctx.beginPath();
+    ctx.moveTo(-20, 2);
+    ctx.lineTo(-28, 14);
+    ctx.lineTo(-16, 3);
+    ctx.closePath();
+    ctx.fill();
+
+    // ── Fuselage ──────────────────────────────────────────────────────────────
+    // Vertical gradient: olive top to dark olive bottom
+    const fuselageGrad = ctx.createLinearGradient(0, -3, 0, 3);
+    fuselageGrad.addColorStop(0, '#6B7A5A');
+    fuselageGrad.addColorStop(1, '#3D4530');
+    ctx.fillStyle = fuselageGrad;
+    ctx.beginPath();
+    ctx.moveTo(FUSELAGE_PTS[0], FUSELAGE_PTS[1]);
+    for (let i = 2; i < FUSELAGE_PTS.length; i += 2) {
+      ctx.lineTo(FUSELAGE_PTS[i], FUSELAGE_PTS[i + 1]);
+    }
+    ctx.closePath();
+    ctx.fill();
+
+    // Fuselage edge highlight
+    ctx.strokeStyle = 'rgba(0,207,255,0.25)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(FUSELAGE_PTS[0], FUSELAGE_PTS[1]);
+    for (let i = 2; i < FUSELAGE_PTS.length; i += 2) {
+      ctx.lineTo(FUSELAGE_PTS[i], FUSELAGE_PTS[i + 1]);
+    }
+    ctx.closePath();
+    ctx.stroke();
+
+    // ── Engine exhaust ────────────────────────────────────────────────────────
+    const glowPulse = 0.6 + Math.sin(this._glowPhase) * 0.4;
+    const exhaustA = glowPulse * 0.55;
+    for (let i = 0; i < 3; i++) {
+      const ex = -22 - i * 7;
+      const alpha = exhaustA * (1 - i / 3);
+      ctx.beginPath();
+      ctx.arc(ex, (Math.random() - 0.5) * 4, randf(1, 2.5), 0, TAU);
       ctx.fillStyle = `rgba(0,207,255,${alpha.toFixed(3)})`;
       ctx.fill();
     }
 
     // ── Sensor dome (nose) ─────────────────────────────────────────────────────
+    // Color varies by state
+    let domeColor;
+    if (this.state === STATE_SEARCH) {
+      domeColor = 'rgba(0,220,255,1)';       // cyan
+    } else if (this.state === STATE_PURSUE) {
+      domeColor = 'rgba(0,255,180,0.9)';     // green
+    } else if (this.state === STATE_ATTACK) {
+      domeColor = 'rgba(255,160,0,0.95)';    // amber
+    } else {
+      domeColor = 'rgba(0,180,200,0.6)';     // dim
+    }
+
     ctx.save();
-    ctx.shadowColor = '#00CFFF';
-    ctx.shadowBlur = 10;
+    ctx.shadowColor = domeColor;
+    ctx.shadowBlur = 8;
     const domeGrad = ctx.createRadialGradient(DOME_X, 0, 0, DOME_X, 0, DOME_R);
-    domeGrad.addColorStop(0, 'rgba(0,220,255,1)');
-    domeGrad.addColorStop(1, 'rgba(0,100,180,0.7)');
+    domeGrad.addColorStop(0, domeColor);
+    domeGrad.addColorStop(1, 'rgba(0,80,140,0.5)');
     ctx.fillStyle = domeGrad;
     ctx.beginPath();
     ctx.arc(DOME_X, 0, DOME_R, 0, TAU);
@@ -378,7 +476,7 @@ export class HunterDrone extends Entity {
         ctx.fillStyle = '#1A3A2A';
       }
       ctx.beginPath();
-      ctx.arc(lx, ly, 2.5, 0, TAU);
+      ctx.arc(lx, ly, 2, 0, TAU);
       ctx.fill();
       ctx.shadowBlur = 0;
       ctx.restore();
@@ -389,7 +487,7 @@ export class HunterDrone extends Entity {
     if (this.state === STATE_SEARCH) {
       // Scanning ring — rotates independently
       ctx.save();
-      ctx.rotate(this._scanRotation); // additional rotation on top of heading
+      ctx.rotate(this._scanRotation);
       ctx.strokeStyle = 'rgba(0,207,255,0.22)';
       ctx.lineWidth = 1.5;
       ctx.setLineDash([8, 10]);
@@ -411,8 +509,6 @@ export class HunterDrone extends Entity {
     if (this.state === STATE_PURSUE && this.target) {
       // Lock-on brackets: unrotate back to world space and draw relative to target
       const tgt = this.target;
-      // We're currently inside ctx.rotate(this.heading) and ctx.translate(this.x, this.y)
-      // Use resetTransform to go back to a known state, then draw in canvas space.
       ctx.restore(); // pops translate+rotate
       // Draw brackets in plain canvas space
       this._drawLockBracketsWorld(ctx, tgt.x, tgt.y);

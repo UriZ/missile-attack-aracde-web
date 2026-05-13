@@ -14,6 +14,7 @@
  */
 
 import { Explosion } from './explosion.js';
+import { DroneKillExplosion } from './entities/drone-kill-explosion.js';
 import { MushroomCloud } from './entities/mushroom-cloud.js';
 import { Crater } from './crater.js';
 import { MissileFragment } from './entities/missile-fragment.js';
@@ -90,6 +91,18 @@ function collidesWithTerrain(entity, terrain) {
 function spawnExplosion(em, game, x, y, isMega = false) {
   em.add(new Explosion(x, y, isMega));
   game.audio.playExplosion(x, isMega);
+}
+
+/**
+ * Spawn the drone-kill explosion effect at the given world position.
+ * @param {import('./entities/entity-manager.js').EntityManager} em
+ * @param {object} game
+ * @param {number} x
+ * @param {number} y
+ */
+function spawnDroneKillExplosion(em, game, x, y) {
+  em.add(new DroneKillExplosion(x, y));
+  game.audio.playExplosion(x, false);
 }
 
 const CRATER_MERGE_RADIUS = 60;
@@ -187,9 +200,8 @@ export class CollisionSystem {
             hit.add(enemy);
             enemy.destroy();
 
-            const mx = (proj.x + enemy.x) * 0.5;
-            const my = (proj.y + enemy.y) * 0.5;
-            spawnExplosion(entityManager, game, mx, my, false);
+            // Spawn drone kill explosion at the enemy's position
+            spawnDroneKillExplosion(entityManager, game, enemy.x, enemy.y);
             game.onEnemyDestroyed();
 
             // Tell drone it made a kill (it manages its own lifecycle)
