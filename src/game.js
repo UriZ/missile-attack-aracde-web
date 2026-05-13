@@ -126,6 +126,9 @@ export class Game {
       (dt) => this.update(dt),
       () => this.render()
     );
+
+    // Auto-start music on the start screen
+    this.audio.autoInitMusic();
   }
 
   // ── State transitions ──────────────────────────────────────
@@ -193,6 +196,11 @@ export class Game {
 
     if (this.state === 'start') {
       if (this.input.mouseJustPressed) {
+        // Resume context if suspended (autoplay policy), then stop music and start game
+        if (this.audio.audioCtx && this.audio.audioCtx.state === 'suspended') {
+          this.audio.audioCtx.resume();
+        }
+        this.audio.stopMusic();
         this.audio.init();
         this.start();
       }

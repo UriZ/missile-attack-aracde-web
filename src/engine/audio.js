@@ -114,6 +114,12 @@ export class Audio {
     this._chatterPlaying = false;
 
     this._initialized = false;
+
+    this._musicArrayBuffer = null;
+    this._musicBuffer = null;
+    this._musicSource = null;
+    this._musicGain = null;
+    this._musicPending = false;
   }
 
   // -----------------------------------------------------------------------
@@ -123,7 +129,9 @@ export class Audio {
     if (this._initialized) return;
     this._initialized = true;
 
-    this.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (!this.audioCtx) {
+      this.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    }
 
     // Resume in case the browser started the context suspended
     if (this.audioCtx.state === 'suspended') {
@@ -141,6 +149,95 @@ export class Audio {
     this.targetAcquiredBuffer = this._generateTargetAcquiredBuffer();
 
     this._loadRadioChatter();
+    this._loadThunder();
+  }
+
+  /**
+   * Try to start music immediately. If browser blocks autoplay,
+   * sets a flag so music starts on the next user interaction.
+   */
+  async autoInitMusic() {
+    // Create audio context early
+    if (!this.audioCtx) {
+      this.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    }
+
+    // Fetch and decode the music file
+    try {
+      const resp = await fetch('assets/radio/Missile%20Strike%20(1).mp3');
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const arrayBuffer = await resp.arrayBuffer();
+      this._musicBuffer = await this.audioCtx.decodeAudioData(arrayBuffer);
+    } catch (e) {
+      console.warn('Failed to load music:', e);
+      return;
+    }
+
+    // Try to play now
+    const tryPlay = () => {
+      if (this.audioCtx.state === 'running') {
+        this.playMusic();
+      } else {
+        // Browser blocked autoplay — listen for ANY user gesture
+        const resume = () => {
+          this.audioCtx.resume().then(() => {
+            if (!this._musicStopped) {
+              this.playMusic();
+            }
+          });
+          document.removeEventListener('click', resume);
+          document.removeEventListener('keydown', resume);
+          document.removeEventListener('pointerdown', resume);
+        };
+        document.addEventListener('click', resume, { once: false });
+        document.addEventListener('keydown', resume, { once: false });
+        document.addEventListener('pointerdown', resume, { once: false });
+      }
+    };
+
+    tryPlay();
+  }
+
+  /** Call on first user interaction to resume music if autoplay was blocked */
+  resumeMusic() {
+    if (!this.audioCtx) return;
+    this.audioCtx.resume();
+  }
+
+  playMusic() {
+    if (!this.audioCtx || !this._musicBuffer) return;
+    if (this._musicSource) return; // already playing
+    const source = this.audioCtx.createBufferSource();
+    const gain = this.audioCtx.createGain();
+    source.buffer = this._musicBuffer;
+    source.loop = true;
+    gain.gain.value = 0.4;
+    source.connect(gain);
+    gain.connect(this.audioCtx.destination);
+    source.start();
+    this._musicSource = source;
+    this._musicGain = gain;
+  }
+
+  stopMusic() {
+    this._musicStopped = true;
+    if (this._musicSource) {
+      this._musicSource.stop();
+      this._musicSource = null;
+      this._musicGain = null;
+    }
+  }
+
+  async _loadThunder() {
+    try {
+      const resp = await fetch('assets/radio/lightning.wav');
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const arrayBuffer = await resp.arrayBuffer();
+      this._thunderBuffer = await this.audioCtx.decodeAudioData(arrayBuffer);
+    } catch (e) {
+      console.warn('Failed to load lightning.wav:', e);
+      this._thunderBuffer = null;
+    }
   }
 
   async _loadRadioChatter() {
@@ -295,60 +392,18 @@ export class Audio {
   }
 
   /**
-   * Thunder rumble — low-frequency sweep 80Hz→20Hz over 1.5s.
-   * Sawtooth wave layered with filtered noise.
+   * Thunder — plays lightning.wav from assets/radio/.
    */
   playThunder() {
-    if (!this.audioCtx) return;
+    if (!this.audioCtx || !this._thunderBuffer) return;
     const ctx = this.audioCtx;
-    const now = ctx.currentTime;
-
-    // Sawtooth oscillator sweep
-    const osc = ctx.createOscillator();
-    const oscGain = ctx.createGain();
-    osc.type = 'sawtooth';
-    osc.frequency.setValueAtTime(80, now);
-    osc.frequency.linearRampToValueAtTime(20, now + 1.5);
-    oscGain.gain.setValueAtTime(0.001, now);
-    oscGain.gain.linearRampToValueAtTime(0.5, now + 0.05);  // fast attack
-    oscGain.gain.setValueAtTime(0.5, now + 1.0);             // sustain
-    oscGain.gain.linearRampToValueAtTime(0, now + 1.5);      // decay
-    osc.connect(oscGain);
-    oscGain.connect(ctx.destination);
-    osc.start(now);
-    osc.stop(now + 1.5);
-
-    // Noise layer through bandpass at 60Hz
-    const noiseBuffer = this._generateThunderNoiseBuffer();
-    const noiseSource = ctx.createBufferSource();
-    const bpf = ctx.createBiquadFilter();
-    const noiseGain = ctx.createGain();
-
-    noiseSource.buffer = noiseBuffer;
-    bpf.type = 'bandpass';
-    bpf.frequency.value = 60;
-    bpf.Q.value = 0.8;
-    noiseGain.gain.value = 0.25;
-
-    noiseSource.connect(bpf);
-    bpf.connect(noiseGain);
-    noiseGain.connect(ctx.destination);
-    noiseSource.start(now);
-    noiseSource.stop(now + 1.5);
-  }
-
-  _generateThunderNoiseBuffer() {
-    const sampleRate = 22050;
-    const numSamples = Math.floor(sampleRate * 1.5);
-    const samples = new Float32Array(numSamples);
-    for (let i = 0; i < numSamples; i++) {
-      const progress = i / numSamples;
-      const env = progress < 0.03 ? progress / 0.03
-                : progress < 0.67 ? 1.0
-                : 1.0 - (progress - 0.67) / 0.33;
-      samples[i] = (Math.random() * 2 - 1) * env;
-    }
-    return this._createBuffer(samples, sampleRate);
+    const source = ctx.createBufferSource();
+    const gain = ctx.createGain();
+    source.buffer = this._thunderBuffer;
+    gain.gain.value = 0.5;
+    source.connect(gain);
+    gain.connect(ctx.destination);
+    source.start();
   }
 
   /**
