@@ -44,10 +44,11 @@ const CROSSHAIR_LINE_LEN  = 32;  // length of each crosshair arm
 const CROSSHAIR_BRACKET   = 10;  // corner bracket leg length
 const CROSSHAIR_BRACKET_D = 18;  // distance from centre to bracket corner
 
-// Heat bar
-const HEAT_BAR_X      = LAUNCHER_PANEL_X;
+// Heat bar — positioned above the Vulkan card (slot index 3)
+const VULKAN_SLOT_INDEX = 3;
+const HEAT_BAR_X      = LAUNCHER_PANEL_X + VULKAN_SLOT_INDEX * (LAUNCHER_CARD_W + LAUNCHER_CARD_GAP);
 const HEAT_BAR_BOTTOM = LAUNCHER_PANEL_Y - LAUNCHER_CARD_H - 20;
-const HEAT_BAR_W      = 200;
+const HEAT_BAR_W      = LAUNCHER_CARD_W;
 const HEAT_BAR_H      = 22;
 
 // ── Color helpers ─────────────────────────────────────────────────────────
@@ -639,8 +640,8 @@ export class UI {
   _drawHeatBar(ctx, heat, overheated) {
     const x = HEAT_BAR_X;
     const y = HEAT_BAR_BOTTOM - HEAT_BAR_H;
-    const w = 240; // match spec 240px
-    const h = 28;  // match spec 28px
+    const w = HEAT_BAR_W;
+    const h = 28;
 
     ctx.save();
 
