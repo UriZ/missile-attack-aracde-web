@@ -11,6 +11,8 @@ import { SAMLauncher } from './entities/sam-launcher.js';
 import { HeatSeekerLauncher } from './entities/heat-seeking-launcher.js';
 import { TruckLauncher } from './entities/truck-launcher.js';
 import { VulkanCannon } from './entities/vulkan-cannon.js';
+import { DronePad } from './entities/drone-pad.js';
+import { HunterDrone } from './entities/hunter-drone.js';
 import { Missile } from './entities/missile.js';
 import { HeatSeekingMissile } from './entities/heat-seeking-missile.js';
 import { VulkanBullet } from './entities/vulkan-bullet.js';
@@ -33,6 +35,7 @@ const LAUNCHER_POSITIONS = [
   { x: 900,  y: 1220, Class: HeatSeekerLauncher },
   { x: 1400, y: 1220, Class: TruckLauncher },
   { x: 1900, y: 1220, Class: VulkanCannon },
+  { x: 2200, y: 1220, Class: DronePad },
 ];
 
 const CROSSHAIR_RADIUS = 90;
@@ -160,6 +163,13 @@ export class Game {
       this.launchers.push(launcher);
     }
 
+    // Inject terrain + sibling references into the truck launcher so it can move
+    const truckLauncher = this.launchers.find(l => l.type === 'truck');
+    if (truckLauncher) {
+      truckLauncher.terrain = this.terrain;
+      truckLauncher._otherLaunchers = this.launchers;
+    }
+
     // Wire vulkan fire callback
     const vulkan = this.launchers[3];
     if (vulkan && vulkan.type === 'vulkan') {
@@ -209,6 +219,7 @@ export class Game {
     } else if (this.state === 'gameover') {
       this.entities.update(dt);
       if (this.input.mouseJustPressed) {
+        this.audio.stopMusic();
         this.start();
       }
     }
@@ -248,8 +259,8 @@ export class Game {
       () => this.entities.getGroup('enemy_missiles').length);
     this.waveNumber = this.waves.getCurrentWave();
 
-    // Keyboard launcher selection (1-4)
-    for (let i = 0; i < 4; i++) {
+    // Keyboard launcher selection (1-5)
+    for (let i = 0; i < 5; i++) {
       if (this.input.wasKeyPressed(String(i + 1))) {
         this._selectLauncher(i);
       }
@@ -465,6 +476,12 @@ export class Game {
     const sel = this.selectedLauncher;
     if (!sel || !sel.alive) return;
 
+    // Right-click: set move destination for truck launcher
+    if (this.input.rightMouseJustPressed && sel.type === 'truck') {
+      sel.setMoveTarget(this.input.mouseX);
+      return;
+    }
+
     if (sel.type === 'vulkan') {
       if (this.input.mouseDown) {
         if (!this._vulkanWasFiring) {
@@ -478,6 +495,10 @@ export class Game {
           this._stopVulkanSpool();
           this._vulkanWasFiring = false;
         }
+      }
+    } else if (sel.type === 'drone_pad') {
+      if (this.input.mouseJustPressed) {
+        this._deployHunterDrone(sel);
       }
     } else {
       if (this.input.mouseJustPressed) {
@@ -504,6 +525,22 @@ export class Game {
       this.entities.add(missile);
       this.audio.playLaunch(launchPos.x, 'sam');
     }
+  }
+
+  _deployHunterDrone(pad) {
+    if (!pad.canDeploy()) return;
+
+    const drone = new HunterDrone(pad.x, pad.y);
+
+    // Wire enemy access so the drone can scan for targets
+    drone.getEnemies = () => this.entities.getGroup('enemy_missiles');
+
+    // Notify pad when drone expires so active count is decremented
+    drone.onExpire = () => pad.onDroneExpired();
+
+    this.entities.add(drone);
+    pad.onDroneDeployed();
+    this.audio.playLaunch(pad.x, 'sam'); // reuse SAM launch sound
   }
 
   // ── Vulkan helpers ─────────────────────────────────────────

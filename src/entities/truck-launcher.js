@@ -1,10 +1,23 @@
 /**
  * Truck Launcher — translated from truck_launcher.tscn + launcher.gd.
  * Mobile launch platform with cab, chassis, wheels, and rocket pod turret.
+ * Supports right-click movement along terrain.
  */
 
 import { Launcher, drawPoly } from './launcher.js';
 import { rgba } from '../utils.js';
+
+// Movement constants
+const MOVE_SPEED = 120;          // px/s max speed
+const ACCELERATION = 240;        // px/s^2
+const DECELERATION = 360;        // px/s^2
+const ARRIVAL_THRESHOLD = 8;     // px — snap to destination
+const MIN_X = 80;
+const MAX_X = 2480;
+const LAUNCHER_CLEARANCE = 120;  // px — min distance from other launchers
+
+// Wheel rotation visual speed (radians per px of travel)
+const WHEEL_RAD_PER_PX = 1 / 10;
 
 // Base (non-rotating) polygons
 const BASE_POLYS = [
@@ -85,17 +98,185 @@ const TURRET_POLYS = [
 const GLOW1 = [-60, 20, -48, 32, 48, 32, 60, 20, 48, 40, -48, 40];
 const GLOW2 = [-76, 22, -58, 44, 58, 44, 76, 22, 58, 50, -58, 50];
 
+/** @typedef {{ x: number, y: number, r: number, alpha: number, vr: number }} DustParticle */
+
 export class TruckLauncher extends Launcher {
   constructor(x, y) {
     super(x, y, 'truck');
     this.clickHalfW = 57;
     this.clickHalfH = 38;
     this.turretTipOffset = -62;
+
+    // Movement state
+    /** @type {number|null} destination X or null when stationary */
+    this.moveTarget = null;
+    this.currentSpeed = 0;
+    /** true = moving right (cab faces right — flipped) */
+    this.facingRight = false;
+    this.wheelAngle = 0;
+
+    // Terrain reference — injected by game.js after construction
+    /** @type {import('../terrain.js').Terrain|null} */
+    this.terrain = null;
+
+    // Other launchers reference for collision avoidance — injected by game.js
+    /** @type {import('./launcher.js').Launcher[]} */
+    this._otherLaunchers = [];
+
+    // Terrain tilt angle (smoothed)
+    this._slopeAngle = 0;
+
+    // Dust particles
+    /** @type {DustParticle[]} */
+    this._dustParticles = [];
+  }
+
+  /**
+   * Clamp targetX to avoid overlapping other launchers and world bounds.
+   * @param {number} targetX
+   */
+  setMoveTarget(targetX) {
+    let clamped = Math.max(MIN_X, Math.min(MAX_X, targetX));
+
+    // Push away from other launchers
+    for (const other of this._otherLaunchers) {
+      if (other === this || !other.alive) continue;
+      const gap = LAUNCHER_CLEARANCE;
+      if (Math.abs(clamped - other.x) < gap) {
+        // Choose the side that keeps us closest to the requested target
+        const leftOption  = other.x - gap;
+        const rightOption = other.x + gap;
+        clamped = Math.abs(targetX - leftOption) < Math.abs(targetX - rightOption)
+          ? leftOption
+          : rightOption;
+        clamped = Math.max(MIN_X, Math.min(MAX_X, clamped));
+      }
+    }
+
+    this.moveTarget = clamped;
+  }
+
+  /** @param {number} dt */
+  update(dt) {
+    super.update(dt);
+
+    if (this.moveTarget !== null) {
+      const dx = this.moveTarget - this.x;
+      const dist = Math.abs(dx);
+
+      if (dist < ARRIVAL_THRESHOLD) {
+        // Snap to destination
+        this.x = this.moveTarget;
+        this.currentSpeed = 0;
+        this.moveTarget = null;
+        this.facingRight = false; // reset to default facing
+      } else {
+        // Direction sign
+        const dir = dx > 0 ? 1 : -1;
+        this.facingRight = dir > 0;
+
+        // Deceleration distance: v^2 / (2a)
+        const brakeDist = (this.currentSpeed * this.currentSpeed) / (2 * DECELERATION);
+
+        if (dist <= brakeDist + 1) {
+          // Brake
+          this.currentSpeed = Math.max(0, this.currentSpeed - DECELERATION * dt);
+        } else {
+          // Accelerate
+          this.currentSpeed = Math.min(MOVE_SPEED, this.currentSpeed + ACCELERATION * dt);
+        }
+
+        const move = this.currentSpeed * dir * dt;
+        this.x += move;
+        this.wheelAngle += move * WHEEL_RAD_PER_PX;
+
+        // Snap Y to terrain surface
+        if (this.terrain) {
+          this.y = this.terrain.getHeightAt(this.x);
+        }
+
+        // Spawn dust behind the rear of the truck
+        if (this.currentSpeed > 20 && this._dustParticles.length < 20) {
+          // Rear wheel is at local x ~ -20 (WheelA center)
+          const rearX = this.x + (this.facingRight ? 20 : -20);
+          const groundY = this.y + 22; // base of wheel
+          this._dustParticles.push({
+            x: rearX + (Math.random() - 0.5) * 8,
+            y: groundY,
+            r: 4 + Math.random() * 4,
+            alpha: 0.55 + Math.random() * 0.2,
+            vr: 6 + Math.random() * 6,
+          });
+        }
+      }
+    }
+
+    // Compute terrain slope for tilt (sample 20px ahead and behind)
+    if (this.terrain) {
+      const yL = this.terrain.getHeightAt(this.x - 20);
+      const yR = this.terrain.getHeightAt(this.x + 20);
+      const targetSlope = Math.atan2(yR - yL, 40);
+      // Smooth the slope to avoid jitter
+      this._slopeAngle += (targetSlope - this._slopeAngle) * Math.min(1, 8 * dt);
+    }
+
+    // Age dust particles
+    for (let i = this._dustParticles.length - 1; i >= 0; i--) {
+      const p = this._dustParticles[i];
+      p.r += p.vr * dt;
+      p.alpha -= 1.1 * dt;
+      if (p.alpha <= 0) {
+        this._dustParticles.splice(i, 1);
+      }
+    }
   }
 
   draw(ctx) {
+    // Draw dust particles first (behind the truck)
+    for (const p of this._dustParticles) {
+      ctx.save();
+      ctx.globalAlpha = Math.max(0, p.alpha);
+      ctx.fillStyle = 'rgba(210,190,140,1)';
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+
+    // Draw destination marker when selected and moving
+    if (this.isSelected && this.moveTarget !== null) {
+      const mx = this.moveTarget;
+      const my = this.terrain ? this.terrain.getHeightAt(mx) : this.y;
+      ctx.save();
+      ctx.strokeStyle = 'rgba(255,160,0,0.75)';
+      ctx.lineWidth = 2;
+      ctx.setLineDash([6, 4]);
+      ctx.beginPath();
+      ctx.moveTo(this.x, this.y - 10);
+      ctx.lineTo(mx, my - 10);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      // Small X marker at destination
+      const ms = 8;
+      ctx.strokeStyle = 'rgba(255,200,60,0.9)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(mx - ms, my - ms - 10); ctx.lineTo(mx + ms, my + ms - 10);
+      ctx.moveTo(mx + ms, my - ms - 10); ctx.lineTo(mx - ms, my + ms - 10);
+      ctx.stroke();
+      ctx.restore();
+    }
+
     ctx.save();
     ctx.translate(this.x, this.y);
+
+    // Terrain tilt
+    ctx.rotate(this._slopeAngle);
+
+    // Flip horizontally when facing right
+    if (this.facingRight) {
+      ctx.scale(-1, 1);
+    }
 
     // Selection glow — orange per spec
     if (this.isSelected) {
@@ -141,7 +322,6 @@ export class TruckLauncher extends Launcher {
     ctx.fillStyle = 'rgba(255,255,255,0.12)';
     ctx.fillRect(-48, -36, 32, 4);
     // Window (blue-gray)
-    ctx.fillStyle = 'rgba(0.22*255,0.36*255,0.52*255,0.92)';
     ctx.fillStyle = 'rgba(56,92,133,0.92)';
     ctx.beginPath();
     ctx.moveTo(-46,-9); ctx.lineTo(-20,-9); ctx.lineTo(-20,-28); ctx.lineTo(-44,-28);
@@ -178,7 +358,7 @@ export class TruckLauncher extends Launcher {
     ctx.fillStyle = '#1A1E16';
     ctx.fillRect(-22, -44, 8, 2);
 
-    // Wheels — improved with gradient hubs
+    // Wheels — with animated rotation
     const wheelDefs = [{ cx: -20, cy: 22 }, { cx: 8, cy: 22 }, { cx: 40, cy: 22 }];
     for (const wd of wheelDefs) {
       // Outer tire
@@ -196,15 +376,24 @@ export class TruckLauncher extends Launcher {
       // Dark center dot
       ctx.fillStyle = '#222222';
       ctx.beginPath(); ctx.arc(wd.cx, wd.cy, 1.2, 0, Math.PI * 2); ctx.fill();
+      // Animated spoke — single line rotated by wheelAngle
+      ctx.save();
+      ctx.translate(wd.cx, wd.cy);
+      ctx.rotate(this.wheelAngle);
+      ctx.strokeStyle = 'rgba(160,160,160,0.5)';
+      ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(0, -6); ctx.lineTo(0, 6); ctx.stroke();
+      ctx.restore();
       // Chrome arch highlight
       ctx.strokeStyle = 'rgba(200,200,200,0.25)';
       ctx.lineWidth = 1.5;
       ctx.beginPath(); ctx.arc(wd.cx - 2, wd.cy - 3, 6, Math.PI * 1.1, Math.PI * 1.8); ctx.stroke();
     }
 
-    // Turret (rotated)
+    // Turret (rotated) — negate rotation when flipped so it still tracks mouse correctly
     ctx.save();
-    ctx.rotate(this.turretRotation);
+    const effectiveTurretRotation = this.facingRight ? -this.turretRotation : this.turretRotation;
+    ctx.rotate(effectiveTurretRotation);
 
     // Rocket pod with gradient
     const podGrad = ctx.createLinearGradient(-14, -54, 52, -4);
@@ -240,6 +429,6 @@ export class TruckLauncher extends Launcher {
     }
 
     ctx.restore(); // turret rotation
-    ctx.restore(); // entity position
+    ctx.restore(); // entity position (translate + rotate + optional scale)
   }
 }

@@ -22,12 +22,13 @@ const LAUNCHER_CARD_H = 90;
 const LAUNCHER_CARD_GAP = 14;
 
 // Known launcher slots (match Godot positions in SCENE_DATA.md)
-// Order corresponds to key 1–4.
+// Order corresponds to key 1–5.
 const LAUNCHER_SLOTS = [
   { key: '1', type: 'sam',        label: 'SAM'     },
   { key: '2', type: 'heatseeker', label: 'HEAT-SK' },
   { key: '3', type: 'truck',      label: 'TRUCK'   },
   { key: '4', type: 'vulkan',     label: 'VULKAN'  },
+  { key: '5', type: 'drone_pad',  label: 'HUNTER'  },
 ];
 
 // Nuke warning duration
@@ -482,7 +483,7 @@ export class UI {
    */
   _getInfoText(game) {
     const sel = game.selectedLauncher;
-    if (!sel) return 'Click a launcher to select   [1-4] select launcher';
+    if (!sel) return 'Click a launcher to select   [1-5] select launcher';
     if (!sel.alive) return 'LAUNCHER DESTROYED — select another';
     switch (sel.type) {
       case 'sam':
@@ -493,6 +494,12 @@ export class UI {
         return 'TRUCK — Click to fire rocket';
       case 'vulkan':
         return 'VULKAN — Hold click to fire   (watch heat!)';
+      case 'drone_pad': {
+        const drones = sel.activeDroneCount || 0;
+        const maxD = 2;
+        const cd = sel.deployCooldown > 0 ? ` (cooldown ${sel.deployCooldown.toFixed(1)}s)` : '';
+        return `HUNTER — Click to deploy autonomous drone   [${drones}/${maxD} active]${cd}`;
+      }
       default:
         return '';
     }

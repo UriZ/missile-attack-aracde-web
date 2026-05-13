@@ -47,6 +47,9 @@ function isTransportPlane(e) { return e.constructor.name === 'TransportPlane'; }
 /** @param {import('./entities/entity.js').Entity} e */
 function isParatrooper(e) { return e.constructor.name === 'Paratrooper'; }
 
+/** @param {import('./entities/entity.js').Entity} e */
+function isHunterDrone(e) { return e.constructor.name === 'HunterDrone'; }
+
 // ------------------------------------------------------------------
 // Geometry helpers
 // ------------------------------------------------------------------
@@ -146,6 +149,57 @@ export class CollisionSystem {
       for (const enemy of enemies) {
         if (hit.has(enemy)) continue;
         if (!circlesOverlap(proj, enemy)) continue;
+
+        // ── HunterDrone special handling ──────────────────────────────
+        // The drone survives normal kills (decrements its own counter).
+        // It dies only against nukes and super missiles.
+        if (isHunterDrone(proj)) {
+          const droneKillsNuke   = isNuke(enemy);
+          const droneKillsSuper  = isSuperMissile(enemy);
+
+          if (droneKillsNuke || droneKillsSuper) {
+            // Drone is destroyed by these heavy hitters
+            hit.add(proj);
+            hit.add(enemy);
+            proj.destroy();
+            spawnExplosion(entityManager, game, proj.x, proj.y, false);
+
+            if (droneKillsNuke) {
+              const destroyed = enemy.takeDamage(1, false);
+              if (destroyed) {
+                enemy.destroy();
+                spawnExplosion(entityManager, game, enemy.x, enemy.y, true);
+                game.onEnemyDestroyed('nuke');
+                game.shakeScreen(20);
+              }
+            } else {
+              // Super missile
+              const fragData = enemy.getFragments ? enemy.getFragments() : [];
+              enemy.destroy();
+              spawnExplosion(entityManager, game, enemy.x, enemy.y, false);
+              game.shakeScreen(12);
+              for (const fd of fragData) {
+                entityManager.add(new MissileFragment(fd.x, fd.y, fd.vx, fd.vy));
+              }
+            }
+          } else {
+            // Drone survives — register the kill, enemy is destroyed
+            hit.add(enemy);
+            enemy.destroy();
+
+            const mx = (proj.x + enemy.x) * 0.5;
+            const my = (proj.y + enemy.y) * 0.5;
+            spawnExplosion(entityManager, game, mx, my, false);
+            game.onEnemyDestroyed();
+
+            // Tell drone it made a kill (it manages its own lifecycle)
+            if (typeof proj.registerKill === 'function') {
+              proj.registerKill();
+            }
+            // Note: drone is NOT added to hit — it can continue killing
+          }
+          break; // done with this enemy iteration for this proj
+        }
 
         const mx = (proj.x + enemy.x) * 0.5;
         const my = (proj.y + enemy.y) * 0.5;
@@ -389,6 +443,8 @@ export class CollisionSystem {
     // ── 4. Player projectiles vs terrain ─────────────────────────────
     for (const proj of playerProjectiles) {
       if (hit.has(proj)) continue;
+      // Hunter drones manage their own lifecycle — never destroyed by terrain
+      if (isHunterDrone(proj)) continue;
       if (!collidesWithTerrain(proj, terrain)) continue;
 
       hit.add(proj);

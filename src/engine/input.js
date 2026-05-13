@@ -15,6 +15,10 @@ export class Input {
     this.mouseDown = false;
     this.mouseJustPressed = false;
 
+    // Right-click state
+    this.rightMouseJustPressed = false;
+    this._rightMousePressed = false;
+
     // Internal flag set by event, consumed by update()
     this._mousePressed = false;
 
@@ -38,7 +42,13 @@ export class Input {
       if (e.button === 0) {
         this.mouseDown = true;
         this._mousePressed = true;
+      } else if (e.button === 2) {
+        this._rightMousePressed = true;
       }
+    });
+
+    canvas.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
     });
 
     canvas.addEventListener('mouseup', (e) => {
@@ -71,6 +81,9 @@ export class Input {
   update() {
     this.mouseJustPressed = this._mousePressed;
     this._mousePressed = false;
+
+    this.rightMouseJustPressed = this._rightMousePressed;
+    this._rightMousePressed = false;
 
     this._keysJustPressedFrame = new Set(this._keysJustPressed);
     this._keysJustPressed.clear();

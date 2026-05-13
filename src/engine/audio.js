@@ -120,6 +120,7 @@ export class Audio {
     this._musicSource = null;
     this._musicGain = null;
     this._musicPending = false;
+    this._musicStopped = false;
   }
 
   // -----------------------------------------------------------------------
@@ -176,7 +177,7 @@ export class Audio {
     // Try to play now
     const tryPlay = () => {
       if (this.audioCtx.state === 'running') {
-        this.playMusic();
+        if (!this._musicStopped) this.playMusic();
       } else {
         // Browser blocked autoplay — listen for ANY user gesture
         const resume = () => {
@@ -185,13 +186,10 @@ export class Audio {
               this.playMusic();
             }
           });
-          document.removeEventListener('click', resume);
-          document.removeEventListener('keydown', resume);
-          document.removeEventListener('pointerdown', resume);
         };
-        document.addEventListener('click', resume, { once: false });
-        document.addEventListener('keydown', resume, { once: false });
-        document.addEventListener('pointerdown', resume, { once: false });
+        document.addEventListener('click', resume, { once: true });
+        document.addEventListener('keydown', resume, { once: true });
+        document.addEventListener('pointerdown', resume, { once: true });
       }
     };
 

@@ -5,9 +5,9 @@
  * instantly. On impact with terrain or launchers it triggers a catastrophic
  * multi-explosion spread much larger than a SuperMissile.
  *
- * Visual redesign v2: Fat Man silhouette via bezier cubic curves,
- * radiation-green palette, rotating trefoil, descent targeting reticle,
- * multi-layer radiation aura.
+ * Visual redesign v3: Military olive hull, red danger bands, yellow hazard
+ * stripes, black matte nosecone, smoke puff trail (ballistic — no rocket fire),
+ * red targeting reticle and warning chevrons, green radiation trefoil.
  */
 
 import { Entity } from './entity.js';
@@ -20,13 +20,12 @@ const FLASH_DURATION = 0.25; // Seconds the hit-flash overlay stays visible
 const OFF_SCREEN = { bottom: 1600, left: -200, right: 2760 };
 
 // ── Color constants ────────────────────────────────────────────────────────
-const C_BODY         = '#1A1F0F';   // Military green-black hull
-const C_WARHEAD      = '#0E110A';   // Darkest section
-const C_WARHEAD_BAND = '#FF6B00';   // Warning orange band
-const C_FIN          = '#141A09';   // Near-black fins
-const C_TOXIC_YELLOW = '#D4FF00';   // Hazard stripes
-const C_TRAIL_CORE   = '#E0FFE0';   // Trail white-hot core
-const C_TRAIL_GREEN  = '#7FFF00';   // Trail green fire
+const C_BODY         = '#2B2E1A';   // Military olive hull
+const C_NOSECONE     = '#141414';   // Matte black nosecone
+const C_FIN          = '#1E2110';   // Near-black fins
+const C_DANGER_RED   = '#FF3300';   // Red danger bands
+const C_HAZARD_YELLOW = '#FFCC00';  // Yellow hazard stripes / stencil text
+const C_TREFOIL      = 'rgba(57,255,20,0.92)';  // Bright green trefoil
 
 // ── Fat Man bezier body drawing helpers ───────────────────────────────────
 
@@ -66,6 +65,11 @@ function traceNukeBody(ctx) {
   ctx.bezierCurveTo(-50, -20, -28, -40, -16, -58); // upper belly swell left
   ctx.bezierCurveTo(-16, -65, -8, -75, 0, -90);   // nose cone left edge
   ctx.closePath();
+}
+
+/** Clamp a value between min and max. */
+function clamp(val, min, max) {
+  return Math.min(Math.max(val, min), max);
 }
 
 export class Nuke extends Entity {
@@ -135,8 +139,12 @@ export class Nuke extends Entity {
     this.x  += this.vx * dt;
     this.y  += this.vy * dt;
 
-    // Rotation follows velocity vector (nose points in travel direction)
-    this.rotation = Math.atan2(this.vy, this.vx) + Math.PI / 2;
+    // Rotation: nose (local y=-90) should point toward the ground.
+    // atan2(vy, vx) for pure downward motion ≈ π/2; adding π/2 gives π,
+    // which rotates 180° so the local -Y axis aligns with world +Y (downward).
+    // Clamp ±15° around π to keep the nuke roughly nose-down.
+    const rawAngle = Math.atan2(this.vy, this.vx) + Math.PI / 2;
+    this.rotation = clamp(rawAngle, Math.PI - 0.26, Math.PI + 0.26);
 
     // Trefoil and reticle rotation
     this.trefoilAngle        += dt * 0.4;
@@ -169,7 +177,6 @@ export class Nuke extends Entity {
     const damageFrac = Math.pow(1 - hpFrac, 0.6);   // 0 → full health, 1 → critical
     const pulse      = 0.5 + 0.5 * Math.sin(this.elapsed * 3.0);
     const fastPulse  = 0.5 + 0.5 * Math.sin(this.elapsed * 8.0 * (1 + damageFrac));
-    const glowAlpha  = (0.12 + 0.28 * damageFrac) * pulse;
 
     // Jitter from recent hit
     const jx = this.damageShake > 0 ? randf(-this.damageShake, this.damageShake) : 0;
@@ -179,19 +186,8 @@ export class Nuke extends Entity {
     ctx.translate(this.x + jx, this.y + jy);
 
     // ── World-space effects (no body rotation) ────────────────────────────
-    // Wide halo — radial gradient, always screen-aligned
-    {
-      const grad = ctx.createRadialGradient(0, 0, 40, 0, 0, 150);
-      grad.addColorStop(0,    `rgba(0,255,65,0)`);
-      grad.addColorStop(0.65, `rgba(0,255,65,${(0.03 * pulse).toFixed(4)})`);
-      grad.addColorStop(1,    `rgba(0,255,65,0)`);
-      ctx.beginPath();
-      ctx.arc(0, 0, 150, 0, Math.PI * 2);
-      ctx.fillStyle = grad;
-      ctx.fill();
-    }
 
-    // Descent targeting reticle (when moving downward fast enough)
+    // Descent targeting reticle — RED, when moving downward fast enough
     if (this.vy > 30) {
       ctx.save();
       ctx.rotate(this.descentReticleAngle);
@@ -200,7 +196,7 @@ export class Nuke extends Entity {
       ctx.beginPath();
       ctx.arc(0, 0, 80, 0, Math.PI * 2);
       ctx.setLineDash([12, 8]);
-      ctx.strokeStyle = `rgba(57,255,20,0.35)`;
+      ctx.strokeStyle = `rgba(255,51,0,0.35)`;
       ctx.lineWidth = 2;
       ctx.stroke();
 
@@ -208,61 +204,57 @@ export class Nuke extends Entity {
       ctx.beginPath();
       ctx.arc(0, 0, 160, 0, Math.PI * 2);
       ctx.setLineDash([20, 14]);
-      ctx.strokeStyle = `rgba(57,255,20,0.20)`;
+      ctx.strokeStyle = `rgba(255,51,0,0.20)`;
       ctx.lineWidth = 1.5;
       ctx.stroke();
 
       ctx.setLineDash([]);
       ctx.restore();
 
-      // ── Spec 4: Ground-zero marker (world-space, no reticle rotation) ───
       // Dashed drop line
       ctx.beginPath();
       ctx.moveTo(0, 0);
       ctx.lineTo(0, 2000);
       ctx.setLineDash([8, 12]);
-      ctx.strokeStyle = `rgba(57,255,20,0.10)`;
+      ctx.strokeStyle = `rgba(255,51,0,0.10)`;
       ctx.lineWidth = 1;
       ctx.stroke();
       ctx.setLineDash([]);
 
-      // Impact ring at ground (approximate: large y value below)
-      // We draw it relative to the nuke position but targeting the floor indicator
-      // Use a fixed large-distance marker anchored at the drop-line bottom visually
-      const impactY = 2000;  // where the line terminates
-      // Impact ring
+      // Impact ring at ground
+      const impactY = 2000;
       ctx.beginPath();
       ctx.arc(0, impactY, 22, 0, TAU);
-      ctx.strokeStyle = `rgba(57,255,20,0.30)`;
+      ctx.strokeStyle = `rgba(255,51,0,0.30)`;
       ctx.lineWidth = 1.5;
       ctx.stroke();
       // Center dot
       ctx.beginPath();
       ctx.arc(0, impactY, 4, 0, TAU);
-      ctx.fillStyle = `rgba(57,255,20,0.45)`;
+      ctx.fillStyle = `rgba(255,51,0,0.45)`;
       ctx.fill();
-      // Crosshair arms (12px each direction)
-      ctx.strokeStyle = `rgba(57,255,20,0.30)`;
+      // Crosshair arms
+      ctx.strokeStyle = `rgba(255,51,0,0.30)`;
       ctx.lineWidth = 1;
       ctx.beginPath();
       ctx.moveTo(-12, impactY); ctx.lineTo(12, impactY);
       ctx.moveTo(0, impactY - 12); ctx.lineTo(0, impactY + 12);
       ctx.stroke();
-      // "IMPACT" label above the ring
+      // "IMPACT" label
       ctx.save();
       ctx.font = 'bold 11px monospace';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'bottom';
-      ctx.fillStyle = `rgba(57,255,20,0.35)`;
+      ctx.fillStyle = `rgba(255,51,0,0.35)`;
       ctx.fillText('IMPACT', 0, impactY - 26);
       ctx.restore();
     }
 
-    // Warning chevrons (when high up — y < 480 in world space)
+    // Warning chevrons — RED, when high up (y < 480 in world space)
     if (this.y < 480) {
       const chevAlpha = (0.6 * fastPulse).toFixed(4);
-      ctx.strokeStyle = `rgba(57,255,20,${chevAlpha})`;
-      ctx.lineWidth = 3;
+      ctx.strokeStyle = `rgba(255,51,0,${chevAlpha})`;
+      ctx.lineWidth = 4;
       ctx.lineJoin = 'miter';
       for (let c = 0; c < 2; c++) {
         const cy = 140 + c * 28;
@@ -274,50 +266,28 @@ export class Nuke extends Entity {
       }
     }
 
-    // ── Spec 3: Contrail — fading green trail segments (world-space) ─────
+    // ── Smoke puff trail (ballistic — dark expanding puffs, no rocket fire) ─
     if (this.trail.length > 1) {
       for (let i = 1; i < this.trail.length; i++) {
-        const t = i / this.trail.length;         // 0 (oldest) → 1 (newest)
-        const alpha = t * 0.22;
-        const lw = 1 + t * 2.5;
-        const prev = this.trail[i - 1];
-        const cur  = this.trail[i];
-        ctx.save();
-        ctx.strokeStyle = `rgba(80,220,80,${alpha.toFixed(3)})`;
-        ctx.lineWidth = lw;
+        const t = i / this.trail.length;  // 0 (oldest) → 1 (newest)
+        // Oldest puffs are largest and most faded; newest are smallest and darkest
+        const age = 1 - t;
+        const alpha = (0.04 + 0.08 * t).toFixed(3);
+        const r = 4 + age * 18;  // grows as it ages
+        const cur = this.trail[i];
         ctx.beginPath();
-        // Positions are in world space; ctx is already translated to this.x,this.y
-        ctx.moveTo(prev.x - this.x, prev.y - this.y);
-        ctx.lineTo(cur.x  - this.x, cur.y  - this.y);
-        ctx.stroke();
-        ctx.restore();
+        ctx.arc(cur.x - this.x, cur.y - this.y, r, 0, TAU);
+        ctx.fillStyle = `rgba(40,40,35,${alpha})`;
+        ctx.fill();
       }
     }
 
     // ── Apply body rotation for all remaining draw operations ─────────────
     ctx.rotate(this.rotation);
 
-    // ── Layer A: tight radiation aura ────────────────────────────────────
-    {
-      const r = 56 + 6 * damageFrac;
-      ctx.beginPath();
-      ctx.arc(0, 0, r, 0, Math.PI * 2);
-      ctx.fillStyle = `rgba(0,255,65,${((0.12 + 0.28 * damageFrac) * pulse).toFixed(4)})`;
-      ctx.fill();
-    }
-
-    // ── Layer B: wide radiation aura ─────────────────────────────────────
-    {
-      const r = 90 + 20 * pulse;
-      ctx.beginPath();
-      ctx.arc(0, 0, r, 0, Math.PI * 2);
-      ctx.fillStyle = `rgba(0,255,65,${(0.04 + 0.03 * damageFrac).toFixed(4)})`;
-      ctx.fill();
-    }
-
-    // ── Layer C: damage rage (orange bleed when critically damaged) ───────
+    // ── Subtle damage aura when critically hit (orange bleed) ─────────────
     if (damageFrac > 0.5) {
-      const orangeAlpha = 0.45 * (damageFrac - 0.5) * 2 * pulse;
+      const orangeAlpha = 0.35 * (damageFrac - 0.5) * 2 * pulse;
       const r = 65 + 12 * pulse;
       ctx.beginPath();
       ctx.arc(0, 0, r, 0, Math.PI * 2);
@@ -325,129 +295,106 @@ export class Nuke extends Entity {
       ctx.fill();
     }
 
-    // ── Body glow silhouette (bezier, 6px outset) ─────────────────────────
+    // ── Body glow silhouette (subtle, dark) ───────────────────────────────
     traceNukeGlow(ctx);
-    ctx.fillStyle = `rgba(0,255,65,${glowAlpha.toFixed(4)})`;
+    ctx.fillStyle = `rgba(20,25,10,0.4)`;
     ctx.fill();
 
-    // ── Main hull (bezier Fat Man shape) ─────────────────────────────────
+    // ── Main hull (bezier Fat Man shape) — military olive ─────────────────
     traceNukeBody(ctx);
     ctx.fillStyle = C_BODY;
     ctx.fill();
 
-    // ── Spec 1a: Body roundness gradient (left-to-right) — clipped to body ──
+    // ── Body roundness gradient (left-to-right) — clipped to body ──────────
     ctx.save();
     traceNukeBody(ctx);
     ctx.clip();
     const roundGrad = ctx.createLinearGradient(-50, 0, 50, 0);
-    roundGrad.addColorStop(0.00, 'rgba(8,10,5,1.0)');
-    roundGrad.addColorStop(0.15, 'rgba(18,22,12,1.0)');
-    roundGrad.addColorStop(0.38, 'rgba(38,48,24,0.85)');
-    roundGrad.addColorStop(0.50, 'rgba(52,66,32,0.70)');
-    roundGrad.addColorStop(0.62, 'rgba(38,48,24,0.85)');
-    roundGrad.addColorStop(0.85, 'rgba(18,22,12,1.0)');
-    roundGrad.addColorStop(1.00, 'rgba(8,10,5,1.0)');
+    roundGrad.addColorStop(0.00, 'rgba(0,0,0,0.7)');
+    roundGrad.addColorStop(0.20, 'rgba(0,0,0,0.3)');
+    roundGrad.addColorStop(0.40, 'rgba(60,65,40,0.2)');
+    roundGrad.addColorStop(0.50, 'rgba(80,85,55,0.1)');
+    roundGrad.addColorStop(0.60, 'rgba(60,65,40,0.2)');
+    roundGrad.addColorStop(0.80, 'rgba(0,0,0,0.3)');
+    roundGrad.addColorStop(1.00, 'rgba(0,0,0,0.7)');
     ctx.fillStyle = roundGrad;
     ctx.fillRect(-55, -95, 110, 160);
     ctx.restore();
 
-    // ── Spec 1b: Panel lines — clipped to body ────────────────────────────
+    // ── Panel lines — clipped to body ─────────────────────────────────────
     ctx.save();
     traceNukeBody(ctx);
     ctx.clip();
-    ctx.strokeStyle = 'rgba(0,30,0,0.55)';
+    ctx.strokeStyle = 'rgba(0,0,0,0.4)';
     ctx.lineWidth = 1;
     ctx.beginPath(); ctx.moveTo(-49, -20); ctx.lineTo(49, -20); ctx.stroke();
-    ctx.strokeStyle = 'rgba(0,30,0,0.45)';
+    ctx.strokeStyle = 'rgba(0,0,0,0.3)';
     ctx.beginPath(); ctx.moveTo(-28, 28); ctx.lineTo(28, 28); ctx.stroke();
     ctx.restore();
 
-    // ── Hazard stripe band at equator (y=-8 to y=+8) — clipped to body ───
+    // ── Danger band 1: nose junction (y=-58 to y=-46) — RED + diagonal hazard stripes
     ctx.save();
     traceNukeBody(ctx);
     ctx.clip();
-    // Base toxic yellow
-    ctx.fillStyle = C_TOXIC_YELLOW;
-    ctx.fillRect(-55, -8, 110, 16);
-    // Dark diagonal hatching
-    ctx.strokeStyle = 'rgba(8,10,4,0.85)';
+    // Red base
+    ctx.fillStyle = C_DANGER_RED;
+    ctx.fillRect(-55, -58, 110, 12);
+    // Black diagonal hazard stripes
+    ctx.strokeStyle = 'rgba(0,0,0,0.75)';
     ctx.lineWidth = 4;
-    for (let sx = -68; sx <= 70; sx += 10) {
+    for (let sx = -68; sx <= 70; sx += 12) {
       ctx.beginPath();
-      ctx.moveTo(sx,      -8);
-      ctx.lineTo(sx + 16,  8);
+      ctx.moveTo(sx,      -58);
+      ctx.lineTo(sx + 12, -46);
       ctx.stroke();
     }
     ctx.restore();
 
-    // ── Equator seam line ─────────────────────────────────────────────────
+    // ── Danger band 2: equator (y=-10 to y=+10) — RED + diagonal hazard stripes
     ctx.save();
     traceNukeBody(ctx);
     ctx.clip();
-    ctx.beginPath();
-    ctx.moveTo(-55, 0);
-    ctx.lineTo( 55, 0);
-    ctx.strokeStyle = 'rgba(255,200,0,0.25)';
-    ctx.lineWidth = 1;
-    ctx.stroke();
-    ctx.restore();
-
-    // ── Warning orange band ring at y=-52 to y=-46 ───────────────────────
-    ctx.save();
-    traceNukeBody(ctx);
-    ctx.clip();
-    ctx.fillStyle = C_WARHEAD_BAND;
-    ctx.fillRect(-20, -52, 40, 6);
-    // Inner highlight stroke
-    ctx.beginPath();
-    ctx.moveTo(-20, -49);
-    ctx.lineTo( 20, -49);
-    ctx.strokeStyle = 'rgba(255,200,80,0.9)';
-    ctx.lineWidth = 1;
-    ctx.stroke();
-    ctx.restore();
-
-    // ── Spec 1c: Rivets on warhead band ───────────────────────────────────
-    ctx.save();
-    traceNukeBody(ctx);
-    ctx.clip();
-    ctx.fillStyle = 'rgba(255,220,100,0.8)';
-    [-16, -8, 0, 8, 16].forEach(rx => {
+    // Red base
+    ctx.fillStyle = C_DANGER_RED;
+    ctx.fillRect(-55, -10, 110, 20);
+    // Black diagonal hazard stripes
+    ctx.strokeStyle = 'rgba(0,0,0,0.75)';
+    ctx.lineWidth = 4;
+    for (let sx = -68; sx <= 70; sx += 12) {
       ctx.beginPath();
-      ctx.arc(rx, -49, 2, 0, TAU);
-      ctx.fill();
-    });
-    ctx.restore();
-
-    // ── Nosecone section ──────────────────────────────────────────────────
-    {
-      const grad = ctx.createLinearGradient(-16, -58, 16, -90);
-      grad.addColorStop(0.0, '#121408');
-      grad.addColorStop(0.7, '#0D0D0D');
-      grad.addColorStop(1.0, '#3DFF20');
-      ctx.beginPath();
-      ctx.moveTo(0, -90);
-      ctx.bezierCurveTo(8, -75, 16, -65, 16, -58);
-      ctx.lineTo(-16, -58);
-      ctx.bezierCurveTo(-16, -65, -8, -75, 0, -90);
-      ctx.closePath();
-      ctx.fillStyle = grad;
-      ctx.fill();
+      ctx.moveTo(sx,      -10);
+      ctx.lineTo(sx + 20,  10);
+      ctx.stroke();
     }
+    ctx.restore();
 
-    // Tip glow
+    // ── Stencil text: "NUCLEAR" at y=-34, "WARHEAD" at y=-22 ─────────────
+    ctx.save();
+    traceNukeBody(ctx);
+    ctx.clip();
+    ctx.font = 'bold 9px monospace';
+    ctx.fillStyle = C_HAZARD_YELLOW;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('NUCLEAR', 0, -34);
+    ctx.fillText('WARHEAD', 0, -22);
+    ctx.restore();
+
+    // ── Nosecone section — matte black, no glow ───────────────────────────
     ctx.beginPath();
-    ctx.arc(0, -90, 5, 0, Math.PI * 2);
-    ctx.fillStyle = `rgba(61,255,32,${(0.9 * pulse).toFixed(4)})`;
+    ctx.moveTo(0, -90);
+    ctx.bezierCurveTo(8, -75, 16, -65, 16, -58);
+    ctx.lineTo(-16, -58);
+    ctx.bezierCurveTo(-16, -65, -8, -75, 0, -90);
+    ctx.closePath();
+    ctx.fillStyle = C_NOSECONE;
     ctx.fill();
-    // Tip bloom
-    ctx.beginPath();
-    ctx.arc(0, -90, 10, 0, Math.PI * 2);
-    ctx.fillStyle = `rgba(0,255,65,${(0.3 * pulse).toFixed(4)})`;
-    ctx.fill();
+    // Subtle edge highlight on nosecone
+    ctx.strokeStyle = 'rgba(60,60,60,0.5)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
 
     // ── Four fins (drawn after body so they layer on top at tail) ─────────
-    // Outer swept fins
     ctx.beginPath();
     ctx.moveTo(-28, 52);
     ctx.lineTo(-72, 78);
@@ -455,11 +402,10 @@ export class Nuke extends Entity {
     ctx.closePath();
     ctx.fillStyle = C_FIN;
     ctx.fill();
-    // Edge highlight on swept outer edge
     ctx.beginPath();
     ctx.moveTo(-28, 52);
     ctx.lineTo(-72, 78);
-    ctx.strokeStyle = 'rgba(80,100,60,0.5)';
+    ctx.strokeStyle = 'rgba(50,55,35,0.5)';
     ctx.lineWidth = 1;
     ctx.stroke();
 
@@ -473,18 +419,17 @@ export class Nuke extends Entity {
     ctx.beginPath();
     ctx.moveTo(28, 52);
     ctx.lineTo(72, 78);
-    ctx.strokeStyle = 'rgba(80,100,60,0.5)';
+    ctx.strokeStyle = 'rgba(50,55,35,0.5)';
     ctx.lineWidth = 1;
     ctx.stroke();
 
     // Inner box fins
-    ctx.fillStyle = '#1A2010';
+    ctx.fillStyle = '#1E2110';
     ctx.fillRect(-14, 54, 10, 24);
     ctx.fillRect(  4, 54, 10, 24);
 
-    // ── Spec 1g: Fin depth strips — perspective face strips ───────────────
-    // Left outer fin perspective strip (bright edge on top face)
-    ctx.fillStyle = 'rgba(40,55,25,0.7)';
+    // Fin depth strips
+    ctx.fillStyle = 'rgba(30,33,20,0.7)';
     ctx.beginPath();
     ctx.moveTo(-28, 52);
     ctx.lineTo(-72, 78);
@@ -492,7 +437,6 @@ export class Nuke extends Entity {
     ctx.lineTo(-24, 54);
     ctx.closePath();
     ctx.fill();
-    // Right outer fin perspective strip
     ctx.beginPath();
     ctx.moveTo(28, 52);
     ctx.lineTo(72, 78);
@@ -500,148 +444,63 @@ export class Nuke extends Entity {
     ctx.lineTo(24, 54);
     ctx.closePath();
     ctx.fill();
-    // Inner box fin highlight strips
-    ctx.fillStyle = 'rgba(50,65,30,0.6)';
-    ctx.fillRect(-14, 54, 10, 3);
-    ctx.fillRect(  4, 54, 10, 3);
 
-    // ── Spec 1d: Radiation trefoil (rotating) — repositioned to y=-14 ────
+    // ── Radiation trefoil — GREEN, moved to y=+18, radius 22 ──────────────
     ctx.save();
-    ctx.translate(0, -14);
+    ctx.translate(0, 18);
     ctx.rotate(this.trefoilAngle);
 
-    // Outer halo (r: 24→20)
+    // Outer halo
     ctx.beginPath();
-    ctx.arc(0, 0, 20, 0, TAU);
-    ctx.fillStyle = `rgba(57,255,20,${(0.15 * pulse).toFixed(4)})`;
+    ctx.arc(0, 0, 24, 0, TAU);
+    ctx.fillStyle = `rgba(57,255,20,${(0.12 * pulse).toFixed(4)})`;
     ctx.fill();
 
-    // Outer ring stroke (r: 22→18)
+    // Outer ring stroke
     ctx.beginPath();
-    ctx.arc(0, 0, 18, 0, TAU);
+    ctx.arc(0, 0, 22, 0, TAU);
     ctx.strokeStyle = 'rgba(57,255,20,0.95)';
     ctx.lineWidth = 3;
     ctx.stroke();
 
-    // Hub filled circle (r: 7→5)
+    // Hub filled circle
     ctx.beginPath();
-    ctx.arc(0, 0, 5, 0, TAU);
-    ctx.fillStyle = 'rgba(57,255,20,0.92)';
+    ctx.arc(0, 0, 6, 0, TAU);
+    ctx.fillStyle = C_TREFOIL;
     ctx.fill();
 
-    // Three trefoil blades (inner r: 9→7, outer r: 21→17)
+    // Three trefoil blades
     for (let s = 0; s < 3; s++) {
       const baseAngle = (s / 3) * TAU - Math.PI / 2;
       ctx.beginPath();
-      ctx.arc(0, 0, 17, baseAngle + 0.25, baseAngle + Math.PI / 3 - 0.25);
-      ctx.arc(0, 0,  7, baseAngle + Math.PI / 3 - 0.25, baseAngle + 0.25, true);
+      ctx.arc(0, 0, 20, baseAngle + 0.25, baseAngle + Math.PI / 3 - 0.25);
+      ctx.arc(0, 0,  8, baseAngle + Math.PI / 3 - 0.25, baseAngle + 0.25, true);
       ctx.closePath();
-      ctx.fillStyle = 'rgba(57,255,20,0.92)';
+      ctx.fillStyle = C_TREFOIL;
       ctx.fill();
     }
 
     ctx.restore(); // end trefoil
 
-    // ── Spec 1e: "DANGER" text — moved below trefoil, smaller, lower alpha ──
-    ctx.save();
-    ctx.shadowColor = 'rgba(0,255,65,0.5)';
-    ctx.shadowBlur = 4;
-    ctx.font = 'bold 11px monospace';
-    ctx.fillStyle = 'rgba(57,255,20,0.75)';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText('DANGER', 0, 38);
-    ctx.restore();
-
-    // ── Rocket fire trail — emanates from y=+62 (tail bottom) ────────────
-    // White-hot core layers
-    const trailCoreColors = [C_TRAIL_CORE, '#BEFFBE', C_TRAIL_GREEN];
-    const coreY = [62, 70, 78];
-    for (let i = 0; i < 3; i++) {
-      const r = (10 - i * 1.5) * (0.75 + Math.random() * 0.5);
+    // ── Damage escalation: orange crack lines at HP=1 ─────────────────────
+    if (this.hp === 1) {
+      ctx.save();
+      traceNukeBody(ctx);
+      ctx.clip();
+      ctx.strokeStyle = `rgba(255,140,0,${(0.6 + 0.4 * fastPulse).toFixed(3)})`;
+      ctx.lineWidth = 1.5;
+      // A few jagged crack lines across the hull
       ctx.beginPath();
-      ctx.arc(randf(-3, 3), coreY[i], Math.max(r, 1), 0, Math.PI * 2);
-      ctx.fillStyle = trailCoreColors[i];
-      ctx.fill();
-    }
-
-    // Green fire layers
-    const greenFireColors = [
-      '#7FFF00', '#57D400', '#39FF14', '#28BB0F', '#14880A', 'rgba(8,60,4,0.4)'
-    ];
-    const flicker = 0.75 + Math.random() * 0.5;
-    for (let i = 0; i < 6; i++) {
-      const cy = 78 + i * 10 * flicker;
-      const r  = (9 - i * 1.2) * flicker;
+      ctx.moveTo(-8, -30); ctx.lineTo(5, -10); ctx.lineTo(-3, 10); ctx.lineTo(12, 30);
+      ctx.stroke();
       ctx.beginPath();
-      ctx.arc(randf(-5, 5), cy, Math.max(r, 1), 0, Math.PI * 2);
-      ctx.fillStyle = greenFireColors[i];
-      ctx.fill();
-    }
-
-    // ── Spec 2: Nozzle shock ring + turbulent exhaust puffs ──────────────
-    // Nozzle shock diamond ring at tail exit
-    ctx.save();
-    ctx.beginPath();
-    ctx.arc(0, 68, 14 + 4 * Math.sin(this.elapsed * 18), 0, TAU);
-    ctx.strokeStyle = `rgba(180,255,180,${(0.55 + 0.2 * Math.sin(this.elapsed * 18)).toFixed(3)})`;
-    ctx.lineWidth = 2;
-    ctx.stroke();
-    ctx.restore();
-
-    // 6 turbulent exhaust puffs (larger, more spread than old smoke)
-    const puffOffsets = [
-      { dx: randf(-6,6),  dy: 78  + randf(0, 8),  r: randf(10, 16) },
-      { dx: randf(-8,8),  dy: 96  + randf(0, 10), r: randf(8,  13) },
-      { dx: randf(-10,10),dy: 115 + randf(0, 10), r: randf(7,  12) },
-      { dx: randf(-10,10),dy: 134 + randf(0, 12), r: randf(5,  10) },
-      { dx: randf(-12,12),dy: 152 + randf(0, 12), r: randf(4,   9) },
-      { dx: randf(-14,14),dy: 170 + randf(0, 14), r: randf(3,   8) },
-    ];
-    for (const p of puffOffsets) {
+      ctx.moveTo(10, -20); ctx.lineTo(-4, 0); ctx.lineTo(8, 20);
+      ctx.stroke();
       ctx.beginPath();
-      ctx.arc(p.dx, p.dy, Math.max(p.r, 1), 0, TAU);
-      ctx.fillStyle = 'rgba(0,50,0,0.08)';
-      ctx.fill();
+      ctx.moveTo(-15, 5); ctx.lineTo(-5, 25); ctx.lineTo(-18, 40);
+      ctx.stroke();
+      ctx.restore();
     }
-
-    // ── HP pips (screen-aligned, above the nose) ──────────────────────────
-    ctx.save();
-    // Undo body rotation so pips stay upright
-    ctx.rotate(-this.rotation);
-    const pipSpacing = 18;
-    const totalPipW  = (MAX_HP - 1) * pipSpacing;
-    for (let i = 0; i < MAX_HP; i++) {
-      const px = i * pipSpacing - totalPipW / 2;
-      const py = -116; // above the missile nose (nose tip at y=-90, 26px gap)
-
-      if (i < this.hp) {
-        // Filled pip: glow + inner fill + outer ring
-        ctx.beginPath();
-        ctx.arc(px, py, 10, 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(57,255,20,${(0.15 * fastPulse).toFixed(4)})`;
-        ctx.fill();
-
-        ctx.beginPath();
-        ctx.arc(px, py, 5, 0, Math.PI * 2);
-        ctx.fillStyle = 'rgba(57,255,20,0.7)';
-        ctx.fill();
-
-        ctx.beginPath();
-        ctx.arc(px, py, 7, 0, Math.PI * 2);
-        ctx.strokeStyle = 'rgba(57,255,20,0.9)';
-        ctx.lineWidth = 2;
-        ctx.stroke();
-      } else {
-        // Ghost pip for lost HP
-        ctx.beginPath();
-        ctx.arc(px, py, 7, 0, Math.PI * 2);
-        ctx.strokeStyle = 'rgba(57,255,20,0.25)';
-        ctx.lineWidth = 1;
-        ctx.stroke();
-      }
-    }
-    ctx.restore();
 
     // ── Hit flash overlay ─────────────────────────────────────────────────
     if (this.flashTimer > 0) {
@@ -651,15 +510,15 @@ export class Nuke extends Entity {
       // Clip to body shape for the flash
       ctx.save();
       traceNukeBody(ctx);
-      ctx.fillStyle = `rgba(200,255,200,${flashAlpha.toFixed(4)})`;
+      ctx.fillStyle = `rgba(255,200,180,${flashAlpha.toFixed(4)})`;
       ctx.fill();
       ctx.restore();
 
-      // Expanding ring
+      // Expanding ring — red
       const ringR = 40 + 80 * (1 - t);
       ctx.beginPath();
       ctx.arc(0, 0, ringR, 0, Math.PI * 2);
-      ctx.strokeStyle = `rgba(57,255,20,${Math.min(flashAlpha * 1.5, 1).toFixed(4)})`;
+      ctx.strokeStyle = `rgba(255,51,0,${Math.min(flashAlpha * 1.5, 1).toFixed(4)})`;
       ctx.lineWidth = 4;
       ctx.stroke();
     }
