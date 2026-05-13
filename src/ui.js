@@ -855,16 +855,16 @@ export class UI {
   }
 
   /**
-   * Default crosshair: per-launcher-type color with dark shadow for daytime visibility.
-   * SAM: bright cyan #00CCFF. Truck: bright amber #FFB040. Vulkan: bright green #00FF88.
-   * All types use a dark drop-shadow outline so they're readable against bright sky.
+   * Default crosshair: drawn with 'difference' blend mode so it inverts whatever
+   * is behind it — guaranteed visibility against bright sky, dark night, or terrain.
+   * A tinted color tint is applied on top in normal blend for launcher identity.
    * @param {CanvasRenderingContext2D} ctx
    * @param {number} mx
    * @param {number} my
    * @param {object|null} sel — selected launcher (optional)
    */
   _drawDefaultCrosshair(ctx, mx, my, sel) {
-    // Per-launcher-type color — bright, saturated for daytime visibility
+    // Per-launcher-type accent color (used for center dot and subtle tint)
     let color;
     const type = sel && sel.type;
     if (type === 'sam') {
@@ -891,19 +891,26 @@ export class UI {
 
     ctx.save();
 
-    // Dark outline pass for contrast against bright backgrounds
-    ctx.strokeStyle = 'rgba(0,0,0,0.75)';
-    ctx.lineWidth = 3.5;
+    // ── Inversion pass: white lines in 'difference' mode invert the background ──
+    // This makes the crosshair appear black on bright sky and white on dark sky,
+    // guaranteeing visibility against any background at any time of day.
+    ctx.globalCompositeOperation = 'difference';
+    ctx.strokeStyle = '#FFFFFF';
+    ctx.lineWidth = 2.5;
     drawLines();
 
-    // Bright color pass on top
+    // ── Color tint pass: subtle colored overlay for launcher identity ──
+    ctx.globalCompositeOperation = 'source-over';
     ctx.strokeStyle = color;
-    ctx.lineWidth = 1.8;
+    ctx.lineWidth = 1;
+    ctx.globalAlpha = 0.55;
     drawLines();
+    ctx.globalAlpha = 1;
 
-    // Corner 2x2 squares at bracket tips
+    // Corner tip squares
     const d = 20, b = 12;
-    ctx.fillStyle = color;
+    ctx.globalCompositeOperation = 'difference';
+    ctx.fillStyle = '#FFFFFF';
     const corners = [
       [mx - d + b, my - d], [mx + d - b, my - d],
       [mx - d + b, my + d], [mx + d - b, my + d],
@@ -911,20 +918,20 @@ export class UI {
       [mx - d, my + d - b], [mx + d, my + d - b],
     ];
     for (const [cx2, cy2] of corners) {
-      ctx.fillRect(cx2 - 1, cy2 - 1, 2, 2);
+      ctx.fillRect(cx2 - 1, cy2 - 1, 3, 3);
     }
 
-    // Center dot — dark ring + bright fill for max contrast
-    ctx.shadowColor = 'rgba(0,0,0,0.9)';
-    ctx.shadowBlur = 5;
-    ctx.fillStyle = 'rgba(0,0,0,0.8)';
+    // Center dot — inversion ring + colored fill
+    ctx.globalCompositeOperation = 'difference';
+    ctx.fillStyle = '#FFFFFF';
     ctx.beginPath();
-    ctx.arc(mx, my, 4.5, 0, Math.PI * 2);
+    ctx.arc(mx, my, 4, 0, Math.PI * 2);
     ctx.fill();
-    ctx.shadowBlur = 0;
+
+    ctx.globalCompositeOperation = 'source-over';
     ctx.fillStyle = color;
     ctx.beginPath();
-    ctx.arc(mx, my, 3, 0, Math.PI * 2);
+    ctx.arc(mx, my, 2.5, 0, Math.PI * 2);
     ctx.fill();
 
     ctx.restore();
@@ -945,19 +952,24 @@ export class UI {
 
     ctx.save();
 
-    // 4 arms — dark outline first for daytime contrast
-    ctx.strokeStyle = 'rgba(0,0,0,0.75)';
-    ctx.lineWidth = 3.5;
+    // 4 arms — 'difference' blend inverts background for guaranteed visibility
+    ctx.globalCompositeOperation = 'difference';
+    ctx.strokeStyle = '#FFFFFF';
+    ctx.lineWidth = 2.5;
     _hline(ctx, mx - armGap - armLen, my, mx - armGap, my);
     _hline(ctx, mx + armGap, my, mx + armGap + armLen, my);
     _vline(ctx, mx, my - armGap - armLen, mx, my - armGap);
     _vline(ctx, mx, my + armGap, mx, my + armGap + armLen);
+    // Color tint pass
+    ctx.globalCompositeOperation = 'source-over';
     ctx.strokeStyle = color;
-    ctx.lineWidth = 1.5;
+    ctx.lineWidth = 1;
+    ctx.globalAlpha = 0.55;
     _hline(ctx, mx - armGap - armLen, my, mx - armGap, my);
     _hline(ctx, mx + armGap, my, mx + armGap + armLen, my);
     _vline(ctx, mx, my - armGap - armLen, mx, my - armGap);
     _vline(ctx, mx, my + armGap, mx, my + armGap + armLen);
+    ctx.globalAlpha = 1;
 
     // Outer scan circle — dashed, rotates at +0.5 rad/s
     ctx.save();
