@@ -855,45 +855,54 @@ export class UI {
   }
 
   /**
-   * Default crosshair: per-launcher-type color, corner brackets with corner squares, center dot with glow.
-   * SAM: steel blue #99BBCC. Truck: warm amber #CC9955. Others: light gray.
+   * Default crosshair: per-launcher-type color with dark shadow for daytime visibility.
+   * SAM: bright cyan #00CCFF. Truck: bright amber #FFB040. Vulkan: bright green #00FF88.
+   * All types use a dark drop-shadow outline so they're readable against bright sky.
    * @param {CanvasRenderingContext2D} ctx
    * @param {number} mx
    * @param {number} my
    * @param {object|null} sel — selected launcher (optional)
    */
   _drawDefaultCrosshair(ctx, mx, my, sel) {
-    // Per-launcher-type color
+    // Per-launcher-type color — bright, saturated for daytime visibility
     let color;
     const type = sel && sel.type;
     if (type === 'sam') {
-      color = '#99BBCC';
+      color = '#00CCFF';
     } else if (type === 'truck') {
-      color = '#CC9955';
+      color = '#FFB040';
+    } else if (type === 'vulkan') {
+      color = '#00FF88';
     } else {
-      color = 'rgba(192,204,204,0.85)';
+      color = '#E0FF40';
     }
 
+    const drawLines = () => {
+      _hline(ctx, mx - CROSSHAIR_GAP - CROSSHAIR_LINE_LEN, my, mx - CROSSHAIR_GAP, my);
+      _hline(ctx, mx + CROSSHAIR_GAP, my, mx + CROSSHAIR_GAP + CROSSHAIR_LINE_LEN, my);
+      _vline(ctx, mx, my - CROSSHAIR_GAP - CROSSHAIR_LINE_LEN, mx, my - CROSSHAIR_GAP);
+      _vline(ctx, mx, my + CROSSHAIR_GAP, mx, my + CROSSHAIR_GAP + CROSSHAIR_LINE_LEN);
+      const d = 20, b = 12;
+      _bracket(ctx, mx - d, my - d,  b,  b);
+      _bracket(ctx, mx + d, my - d, -b,  b);
+      _bracket(ctx, mx - d, my + d,  b, -b);
+      _bracket(ctx, mx + d, my + d, -b, -b);
+    };
+
     ctx.save();
+
+    // Dark outline pass for contrast against bright backgrounds
+    ctx.strokeStyle = 'rgba(0,0,0,0.75)';
+    ctx.lineWidth = 3.5;
+    drawLines();
+
+    // Bright color pass on top
     ctx.strokeStyle = color;
     ctx.lineWidth = 1.8;
+    drawLines();
 
-    // Horizontal arms
-    _hline(ctx, mx - CROSSHAIR_GAP - CROSSHAIR_LINE_LEN, my, mx - CROSSHAIR_GAP, my);
-    _hline(ctx, mx + CROSSHAIR_GAP, my, mx + CROSSHAIR_GAP + CROSSHAIR_LINE_LEN, my);
-    // Vertical arms
-    _vline(ctx, mx, my - CROSSHAIR_GAP - CROSSHAIR_LINE_LEN, mx, my - CROSSHAIR_GAP);
-    _vline(ctx, mx, my + CROSSHAIR_GAP, mx, my + CROSSHAIR_GAP + CROSSHAIR_LINE_LEN);
-
-    // Corner brackets (four corners, each is an L-shape) — 12px arm, 20px from center
-    const d = 20;
-    const b = 12;
-    _bracket(ctx, mx - d, my - d,  b,  b); // top-left
-    _bracket(ctx, mx + d, my - d, -b,  b); // top-right
-    _bracket(ctx, mx - d, my + d,  b, -b); // bottom-left
-    _bracket(ctx, mx + d, my + d, -b, -b); // bottom-right
-
-    // Corner 2x2 squares at bracket corners
+    // Corner 2x2 squares at bracket tips
+    const d = 20, b = 12;
     ctx.fillStyle = color;
     const corners = [
       [mx - d + b, my - d], [mx + d - b, my - d],
@@ -905,14 +914,18 @@ export class UI {
       ctx.fillRect(cx2 - 1, cy2 - 1, 2, 2);
     }
 
-    // Center dot r=3 white with glow blur 6
-    ctx.shadowColor = '#FFFFFF';
-    ctx.shadowBlur = 6;
-    ctx.fillStyle = '#FFFFFF';
+    // Center dot — dark ring + bright fill for max contrast
+    ctx.shadowColor = 'rgba(0,0,0,0.9)';
+    ctx.shadowBlur = 5;
+    ctx.fillStyle = 'rgba(0,0,0,0.8)';
+    ctx.beginPath();
+    ctx.arc(mx, my, 4.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = color;
     ctx.beginPath();
     ctx.arc(mx, my, 3, 0, Math.PI * 2);
     ctx.fill();
-    ctx.shadowBlur = 0;
 
     ctx.restore();
   }
@@ -932,7 +945,13 @@ export class UI {
 
     ctx.save();
 
-    // 4 arms
+    // 4 arms — dark outline first for daytime contrast
+    ctx.strokeStyle = 'rgba(0,0,0,0.75)';
+    ctx.lineWidth = 3.5;
+    _hline(ctx, mx - armGap - armLen, my, mx - armGap, my);
+    _hline(ctx, mx + armGap, my, mx + armGap + armLen, my);
+    _vline(ctx, mx, my - armGap - armLen, mx, my - armGap);
+    _vline(ctx, mx, my + armGap, mx, my + armGap + armLen);
     ctx.strokeStyle = color;
     ctx.lineWidth = 1.5;
     _hline(ctx, mx - armGap - armLen, my, mx - armGap, my);
