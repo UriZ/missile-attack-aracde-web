@@ -107,9 +107,12 @@ export class Game {
       if (this.terrain) this.terrain.recovering = false;
       // Advance day/night cycle to target tod for this wave
       this.dayNight.setWave(wave);
-      // Stormy biome: force rain weather every wave
+      // Stormy biome: ensure DayNight does NOT draw its own 200 rain drops,
+      // because biome.drawFrontOfTerrain() already draws 400 heavy rain
+      // streaks. Both firing every frame would produce 600 rain particles —
+      // a visible duplication with mismatched speeds/angles.
       if (this.biomeSystem._def && this.biomeSystem._def.id === 'stormy') {
-        this.dayNight._weatherType = 'rain';
+        this.dayNight._weatherType = 'none';
       }
     };
     this.waves.onWaveComplete = (wave) => {

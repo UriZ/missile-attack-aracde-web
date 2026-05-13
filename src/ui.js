@@ -37,6 +37,7 @@ const NUKE_WARNING_DURATION = 5.0; // seconds
 const BANNER_FADE_IN  = 0.35; // seconds
 const BANNER_HOLD     = 1.80; // seconds
 const BANNER_FADE_OUT = 0.45; // seconds
+
 // Crosshair geometry
 const CROSSHAIR_GAP       = 14;  // gap around center (px)
 const CROSSHAIR_LINE_LEN  = 32;  // length of each crosshair arm

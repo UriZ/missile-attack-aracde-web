@@ -3,21 +3,29 @@
  * Heavy industrial mount with 6 rotating barrels inside an octagonal shroud,
  * OD green ammo feed box, brass belt chute, muzzle brake crown,
  * 3-stage heat glow, and procedural muzzle flash / shell casings / smoke.
+ *
+ * Visual redesign (issue #27): depth-sorted barrel cluster with cylindrical
+ * shroud, per-barrel muzzle flash originating from active (frontmost) barrel,
+ * and 3-stage spool-up animation (discrete → smear → blur ring).
  */
 
 import { Launcher, drawPoly } from './launcher.js';
 import { TAU, rgba, lerp, clamp, randf } from '../utils.js';
 
 // ══════════════════════════════════════════════════════════════════
-// Geometry data — M134 heavy pedestal proportions
+// Geometry data — M134 heavy pedestal proportions (issue #27 redesign)
 // ══════════════════════════════════════════════════════════════════
 
-// Barrel cluster constants
+// Barrel cluster constants (updated per spec)
 const NUM_BARRELS = 6;
-const BARREL_CIRCLE_RADIUS = 8;   // radius from spin axis to each barrel center
-const BARREL_HALF_W = 3;          // half-width of each barrel tube
-const BARREL_LENGTH = 22;         // half-length from cluster center to muzzle
-
+const BARREL_ORBIT_R = 9;         // px from spin axis to barrel center
+const BARREL_HALF_W = 3.5;        // half-width of each barrel tube
+const BARREL_LENGTH = 26;         // half-length from cluster center to muzzle
+const CLUSTER_CENTER_Y = -40;     // turret-local y of barrel cluster center
+const MUZZLE_FACE_Y = -65;        // where the end-on circle view is
+const MUZZLE_FACE_R = 12;         // radius of muzzle face disc
+const SHROUD_TOP = -60;
+const SHROUD_BOTTOM = -22;
 
 // Selection glow polys
 const GLOW1 = [-44, 34, 44, 34, 38, 26, -38, 26];
@@ -230,13 +238,13 @@ export class VulkanCannon extends Launcher {
     ctx.fillRect(22, -18, 8, 16);
 
     // Mounting bolts on foot plate (4 bolts)
-    for (const bx of [-30, -18, 18, 30]) {
+    for (const boltX of [-30, -18, 18, 30]) {
       ctx.beginPath();
-      ctx.arc(bx, 28, 2.5, 0, TAU);
+      ctx.arc(boltX, 28, 2.5, 0, TAU);
       ctx.fillStyle = '#5A5C64';
       ctx.fill();
       ctx.beginPath();
-      ctx.arc(bx, 28, 1.2, 0, TAU);
+      ctx.arc(boltX, 28, 1.2, 0, TAU);
       ctx.fillStyle = '#222428';
       ctx.fill();
     }
@@ -311,114 +319,242 @@ export class VulkanCannon extends Launcher {
 
     // 4c. Dark interior cavity — visible background behind spinning barrels
     {
-      const cavityGrad = ctx.createRadialGradient(0, -40, 0, 0, -40, 14);
+      const cavityGrad = ctx.createRadialGradient(0, CLUSTER_CENTER_Y, 0, 0, CLUSTER_CENTER_Y, 14);
       cavityGrad.addColorStop(0, '#0D0E11');
       cavityGrad.addColorStop(1, '#16181D');
       ctx.beginPath();
-      ctx.moveTo(-13, -21);
-      ctx.lineTo(13, -21);
-      ctx.lineTo(13, -59);
-      ctx.lineTo(-13, -59);
-      ctx.closePath();
+      ctx.rect(-13, SHROUD_TOP + 1, 26, SHROUD_BOTTOM - SHROUD_TOP - 1);
       ctx.fillStyle = cavityGrad;
       ctx.fill();
     }
 
-    // 4d. Spinning barrel cluster (center at y = -40) — drawn BEFORE shroud walls
-    ctx.save();
-    ctx.translate(0, -40);
-    ctx.rotate(this.barrelSpin * Math.PI / 180);
+    // ── 4d. Depth-sorted barrel cluster ─────────────────────────
+    // Each barrel's angle around the bore axis: barrelSpin (degrees → radians)
+    // bx = sin(angle) * BARREL_ORBIT_R (horizontal displacement)
+    // depth = -cos(angle): front barrels have depth > 0, back barrels < 0
+    // Sort back-to-front (ascending depth) for correct occlusion
+    const spinRad = this.barrelSpin * Math.PI / 180;
 
+    // Determine spool-up stage for visual effect:
+    // stage 0: slow (speed < 200 deg/s) — discrete barrels visible
+    // stage 1: mid (200-900 deg/s) — smeared
+    // stage 2: fast (> 900 deg/s) — blur ring
+    const speed = this.barrelSpeed;
+    const spoolStage = speed > 900 ? 2 : speed > 200 ? 1 : 0;
+
+    // Build barrel descriptors with depth values
+    const barrels = [];
     for (let i = 0; i < NUM_BARRELS; i++) {
-      const angle = (TAU / NUM_BARRELS) * i;
-      const bx = Math.cos(angle) * BARREL_CIRCLE_RADIUS;
-      const by = Math.sin(angle) * BARREL_CIRCLE_RADIUS;
+      const angle = spinRad + (TAU / NUM_BARRELS) * i;
+      const bx = Math.sin(angle) * BARREL_ORBIT_R;
+      const depth = -Math.cos(angle); // -1=back, +1=front
+      // brightness: map depth (-1..1) to (0.28..1.0)
+      const brightness = 0.28 + (depth + 1) * 0.5 * 0.72;
+      barrels.push({ i, angle, bx, depth, brightness });
+    }
 
+    // Sort back to front
+    barrels.sort((a, b) => a.depth - b.depth);
+
+    // Find active barrel (frontmost)
+    const activeBarrel = barrels[barrels.length - 1];
+
+    if (spoolStage === 2) {
+      // ── Stage 2: full-speed — draw as a single blur ring ──────
+      // The cluster appears as a solid tube at full speed
       ctx.save();
-      ctx.translate(bx, by);
+      ctx.translate(0, CLUSTER_CENTER_Y);
 
-      // High-contrast L-R gradient for roundness illusion
-      const barrelGrad = ctx.createLinearGradient(-BARREL_HALF_W, 0, BARREL_HALF_W, 0);
-      barrelGrad.addColorStop(0,    '#B0B4BE');
-      barrelGrad.addColorStop(0.35, '#8A8E98');
-      barrelGrad.addColorStop(0.7,  '#5A5E68');
-      barrelGrad.addColorStop(1,    '#303238');
-      ctx.fillStyle = barrelGrad;
-      ctx.fillRect(-BARREL_HALF_W, -BARREL_LENGTH, BARREL_HALF_W * 2, BARREL_LENGTH * 2);
+      // Cylindrical shroud body — the blur ring fills in
+      const shroudH = BARREL_LENGTH * 2;
+      const shroudGrad = ctx.createLinearGradient(-BARREL_ORBIT_R - BARREL_HALF_W, 0, BARREL_ORBIT_R + BARREL_HALF_W, 0);
+      shroudGrad.addColorStop(0,    '#3A3C46');
+      shroudGrad.addColorStop(0.15, '#8A8E98');
+      shroudGrad.addColorStop(0.5,  '#C8CACC');
+      shroudGrad.addColorStop(0.85, '#8A8E98');
+      shroudGrad.addColorStop(1,    '#2A2C34');
+      ctx.fillStyle = shroudGrad;
+      ctx.fillRect(-(BARREL_ORBIT_R + BARREL_HALF_W), -BARREL_LENGTH, (BARREL_ORBIT_R + BARREL_HALF_W) * 2, shroudH);
 
-      // Bore hole at muzzle end
+      // Blur ring alpha overlay — spinning smear effect
+      const smearAlpha = clamp((speed - 900) / 600, 0, 1) * 0.35;
       ctx.beginPath();
-      ctx.arc(0, -BARREL_LENGTH, 2, 0, TAU);
-      ctx.fillStyle = '#050507';
+      ctx.arc(0, 0, BARREL_ORBIT_R, 0, TAU);
+      ctx.strokeStyle = `rgba(180,185,195,${smearAlpha.toFixed(3)})`;
+      ctx.lineWidth = BARREL_HALF_W * 2;
+      ctx.stroke();
+
+      // Bore channel (dark center)
+      ctx.fillStyle = '#0D0E11';
+      ctx.fillRect(-3, -BARREL_LENGTH, 6, BARREL_LENGTH * 2);
+
+      ctx.restore();
+
+    } else if (spoolStage === 1) {
+      // ── Stage 1: mid-speed — smeared individual barrels ───────
+      ctx.save();
+      ctx.translate(0, CLUSTER_CENTER_Y);
+
+      // Draw a smear for each barrel — arc at the orbit radius
+      const smearFraction = clamp((speed - 200) / 700, 0, 1);
+      const smearArc = smearFraction * (TAU / NUM_BARRELS) * 0.7; // arc angle smear
+
+      for (const b of barrels) {
+        const br = Math.round(b.brightness * 180);
+        const smearAlpha = 0.55 + b.depth * 0.35;
+        ctx.save();
+        ctx.translate(b.bx, 0);
+
+        // Smeared barrel tube
+        const barrelGrad = ctx.createLinearGradient(-BARREL_HALF_W, 0, BARREL_HALF_W, 0);
+        barrelGrad.addColorStop(0,    `rgba(${br + 40},${br + 42},${br + 48},${smearAlpha.toFixed(3)})`);
+        barrelGrad.addColorStop(0.4,  `rgba(${br},${br + 2},${br + 8},${smearAlpha.toFixed(3)})`);
+        barrelGrad.addColorStop(1,    `rgba(${Math.max(0, br - 40)},${Math.max(0, br - 38)},${Math.max(0, br - 30)},${smearAlpha.toFixed(3)})`);
+        ctx.fillStyle = barrelGrad;
+        ctx.fillRect(-BARREL_HALF_W, -BARREL_LENGTH, BARREL_HALF_W * 2, BARREL_LENGTH * 2);
+
+        // Motion smear arc blur at orbit
+        if (smearArc > 0.01) {
+          ctx.save();
+          ctx.translate(-b.bx, 0); // back to center for arc
+          const arcStartAngle = b.angle - Math.PI / 2 - smearArc;
+          ctx.beginPath();
+          ctx.arc(0, -BARREL_LENGTH * 0.3, BARREL_ORBIT_R, arcStartAngle, arcStartAngle + smearArc * 2);
+          ctx.strokeStyle = `rgba(160,165,175,${(smearAlpha * smearFraction * 0.3).toFixed(3)})`;
+          ctx.lineWidth = BARREL_HALF_W * 1.5;
+          ctx.stroke();
+          ctx.restore();
+        }
+
+        ctx.restore();
+      }
+
+      // Center hub
+      ctx.beginPath();
+      ctx.arc(0, 0, 8, 0, TAU);
+      ctx.fillStyle = '#1A1C22';
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(0, 0, 2, 0, TAU);
+      ctx.fillStyle = '#6070A0';
+      ctx.fill();
+
+      ctx.restore();
+
+    } else {
+      // ── Stage 0: slow/stopped — discrete depth-sorted barrels ─
+      ctx.save();
+      ctx.translate(0, CLUSTER_CENTER_Y);
+
+      for (const b of barrels) {
+        ctx.save();
+        ctx.translate(b.bx, 0);
+
+        // Brightness-scaled cylindrical gradient per barrel
+        const br = Math.round(b.brightness * 200);
+        const barrelGrad = ctx.createLinearGradient(-BARREL_HALF_W, 0, BARREL_HALF_W, 0);
+        barrelGrad.addColorStop(0,    `rgb(${Math.min(255, br + 55)},${Math.min(255, br + 57)},${Math.min(255, br + 63)})`);
+        barrelGrad.addColorStop(0.3,  `rgb(${Math.min(255, br + 20)},${Math.min(255, br + 22)},${Math.min(255, br + 28)})`);
+        barrelGrad.addColorStop(0.7,  `rgb(${br},${Math.min(255, br + 2)},${Math.min(255, br + 8)})`);
+        barrelGrad.addColorStop(1,    `rgb(${Math.max(0, br - 45)},${Math.max(0, br - 43)},${Math.max(0, br - 37)})`);
+        ctx.fillStyle = barrelGrad;
+        ctx.fillRect(-BARREL_HALF_W, -BARREL_LENGTH, BARREL_HALF_W * 2, BARREL_LENGTH * 2);
+
+        // Bore hole at muzzle end (visible when barrel is at front)
+        if (b.depth > 0.2) {
+          ctx.beginPath();
+          ctx.arc(0, -BARREL_LENGTH, 2.2 * b.depth, 0, TAU);
+          ctx.fillStyle = '#050507';
+          ctx.fill();
+          // Bore rim glint
+          ctx.beginPath();
+          ctx.arc(-0.6, -BARREL_LENGTH - 0.6, 0.7, 0, TAU);
+          ctx.fillStyle = `rgba(255,255,255,${(b.depth * 0.35).toFixed(3)})`;
+          ctx.fill();
+        }
+
+        ctx.restore();
+      }
+
+      // Center hub with rotating spoke markers
+      ctx.save();
+      ctx.rotate(spinRad);
+      // Spokes
+      ctx.strokeStyle = '#3A3C48';
+      ctx.lineWidth = 1.2;
+      for (let s = 0; s < 3; s++) {
+        const sa = (TAU / 3) * s;
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.lineTo(Math.cos(sa) * 7, Math.sin(sa) * 7);
+        ctx.stroke();
+      }
+      ctx.restore();
+
+      // Hub rings (non-rotating overlay)
+      ctx.beginPath();
+      ctx.arc(0, 0, 8, 0, TAU);
+      ctx.fillStyle = '#1A1C22';
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(0, 0, 5, 0, TAU);
+      ctx.fillStyle = '#2A2C36';
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(0, 0, 2, 0, TAU);
+      ctx.fillStyle = '#6070A0';
       ctx.fill();
 
       ctx.restore();
     }
 
-    // Center hub (spins with barrels)
-    ctx.beginPath();
-    ctx.arc(0, 0, 8, 0, TAU);
-    ctx.fillStyle = '#1A1C22';
-    ctx.fill();
-    ctx.beginPath();
-    ctx.arc(0, 0, 5, 0, TAU);
-    ctx.fillStyle = '#2A2C36';
-    ctx.fill();
-    ctx.beginPath();
-    ctx.arc(0, 0, 2, 0, TAU);
-    ctx.fillStyle = '#6070A0';
-    ctx.fill();
-
-    ctx.restore(); // barrel spin
-
-    // 4e. Shroud walls — LEFT and RIGHT strips only (not solid fill, so barrels show)
-    // Left wall
+    // ── 4e. Cylindrical shroud — drawn OVER barrels ─────────────
+    // Left wall: gradient creates cylinder illusion (edge darker, center brightest)
     {
-      const lwGrad = ctx.createLinearGradient(-16, 0, -13, 0);
-      lwGrad.addColorStop(0, '#3A3C44');
-      lwGrad.addColorStop(0.5, '#2A2C32');
-      lwGrad.addColorStop(1, '#1E2028');
+      const lwGrad = ctx.createLinearGradient(-16, 0, -12, 0);
+      lwGrad.addColorStop(0, '#3A3C46');
+      lwGrad.addColorStop(0.4, '#2A2C34');
+      lwGrad.addColorStop(1, '#1A1C22');
       ctx.fillStyle = lwGrad;
       ctx.beginPath();
-      ctx.moveTo(-14, -20);
-      ctx.lineTo(-16, -24);
-      ctx.lineTo(-16, -56);
-      ctx.lineTo(-14, -60);
-      ctx.lineTo(-13, -60);
-      ctx.lineTo(-13, -20);
+      ctx.moveTo(-13, SHROUD_BOTTOM + 1);
+      ctx.lineTo(-16, SHROUD_BOTTOM - 3);
+      ctx.lineTo(-16, SHROUD_TOP + 4);
+      ctx.lineTo(-13, SHROUD_TOP);
+      ctx.lineTo(-12, SHROUD_TOP);
+      ctx.lineTo(-12, SHROUD_BOTTOM + 1);
       ctx.closePath();
       ctx.fill();
     }
     // Right wall
     {
-      const rwGrad = ctx.createLinearGradient(13, 0, 16, 0);
-      rwGrad.addColorStop(0, '#1E2028');
-      rwGrad.addColorStop(0.5, '#2A2C32');
-      rwGrad.addColorStop(1, '#252830');
+      const rwGrad = ctx.createLinearGradient(12, 0, 16, 0);
+      rwGrad.addColorStop(0, '#1A1C22');
+      rwGrad.addColorStop(0.6, '#2A2C34');
+      rwGrad.addColorStop(1, '#3A3C46');
       ctx.fillStyle = rwGrad;
       ctx.beginPath();
-      ctx.moveTo(13, -20);
-      ctx.lineTo(13, -60);
-      ctx.lineTo(14, -60);
-      ctx.lineTo(16, -56);
-      ctx.lineTo(16, -24);
-      ctx.lineTo(14, -20);
+      ctx.moveTo(12, SHROUD_BOTTOM + 1);
+      ctx.lineTo(12, SHROUD_TOP);
+      ctx.lineTo(13, SHROUD_TOP);
+      ctx.lineTo(16, SHROUD_TOP + 4);
+      ctx.lineTo(16, SHROUD_BOTTOM - 3);
+      ctx.lineTo(13, SHROUD_BOTTOM + 1);
       ctx.closePath();
       ctx.fill();
     }
     // Top cap
-    ctx.fillStyle = '#2A2C32';
-    ctx.fillRect(-13, -59, 26, 3);
+    ctx.fillStyle = '#2A2C34';
+    ctx.fillRect(-13, SHROUD_TOP, 26, 3);
     // Bottom cap
-    ctx.fillRect(-13, -20, 26, 3);
+    ctx.fillRect(-13, SHROUD_BOTTOM - 2, 26, 3);
 
-    // 4f. Clamp rings over everything — y = -30, -42, -54
+    // ── 4f. Clamp rings ──────────────────────────────────────────
     for (const cy of [-30, -42, -54]) {
       ctx.fillStyle = '#1E2028';
       ctx.fillRect(-17, cy - 2, 34, 4);
       ctx.fillStyle = 'rgba(180,180,200,0.25)';
       ctx.fillRect(-17, cy - 2, 34, 1);
-      // 4 bolts per ring
       for (const bx of [-13, -5, 5, 13]) {
         ctx.beginPath();
         ctx.arc(bx, cy, 1.8, 0, TAU);
@@ -431,73 +567,124 @@ export class VulkanCannon extends Launcher {
       }
     }
 
-    // 4g. Muzzle brake — outer crown shape + open rotating barrel face
+    // ── 4g. Muzzle crown + end-on muzzle face ────────────────────
     const muzzleColor = this._getMuzzleColor();
     // Outer octagonal crown
     ctx.beginPath();
-    ctx.moveTo(-13, -60);
-    ctx.lineTo(-15, -62);
-    ctx.lineTo(-15, -68);
-    ctx.lineTo(-13, -70);
-    ctx.lineTo(13, -70);
-    ctx.lineTo(15, -68);
-    ctx.lineTo(15, -62);
-    ctx.lineTo(13, -60);
+    ctx.moveTo(-13, SHROUD_TOP);
+    ctx.lineTo(-15, SHROUD_TOP - 2);
+    ctx.lineTo(-15, SHROUD_TOP - 8);
+    ctx.lineTo(-13, SHROUD_TOP - 10);
+    ctx.lineTo(13, SHROUD_TOP - 10);
+    ctx.lineTo(15, SHROUD_TOP - 8);
+    ctx.lineTo(15, SHROUD_TOP - 2);
+    ctx.lineTo(13, SHROUD_TOP);
     ctx.closePath();
     ctx.fillStyle = muzzleColor;
     ctx.fill();
-
-    // Muzzle crown rim highlight
+    // Crown rim highlight
     ctx.fillStyle = 'rgba(255,255,255,0.1)';
-    ctx.fillRect(-14, -62, 28, 1);
+    ctx.fillRect(-14, SHROUD_TOP - 2, 28, 1);
 
-    // Dark muzzle face — open cavity showing rotating barrel ends
+    // Dark muzzle face disc — background
     {
-      const muzzleFaceGrad = ctx.createRadialGradient(0, -65, 0, 0, -65, 11);
+      const muzzleFaceGrad = ctx.createRadialGradient(0, MUZZLE_FACE_Y, 0, 0, MUZZLE_FACE_Y, MUZZLE_FACE_R);
       muzzleFaceGrad.addColorStop(0, '#0A0B0E');
       muzzleFaceGrad.addColorStop(1, '#1E2028');
       ctx.beginPath();
-      ctx.arc(0, -65, 11, 0, TAU);
+      ctx.arc(0, MUZZLE_FACE_Y, MUZZLE_FACE_R, 0, TAU);
       ctx.fillStyle = muzzleFaceGrad;
       ctx.fill();
       // Rim ring
       ctx.beginPath();
-      ctx.arc(0, -65, 11, 0, TAU);
+      ctx.arc(0, MUZZLE_FACE_Y, MUZZLE_FACE_R, 0, TAU);
       ctx.strokeStyle = '#3A3C48';
       ctx.lineWidth = 1.5;
       ctx.stroke();
     }
 
-    // Rotating barrel tip circles inside the muzzle face
+    // Barrel tip circles on muzzle face — spool-stage-aware rendering
     ctx.save();
-    ctx.translate(0, -65);
-    ctx.rotate(this.barrelSpin * Math.PI / 180);
-    for (let i = 0; i < NUM_BARRELS; i++) {
-      const angle = (TAU / NUM_BARRELS) * i;
-      const tx = Math.cos(angle) * BARREL_CIRCLE_RADIUS;
-      const ty = Math.sin(angle) * BARREL_CIRCLE_RADIUS;
-      ctx.save();
-      ctx.translate(tx, ty);
-      // Tip face with radial gradient
-      const tipGrad = ctx.createRadialGradient(-0.8, -0.8, 0, 0, 0, 3);
-      tipGrad.addColorStop(0, '#C0C4CC');
-      tipGrad.addColorStop(1, '#3A3C44');
+    ctx.translate(0, MUZZLE_FACE_Y);
+
+    if (spoolStage === 2) {
+      // Full-speed: draw a blur ring (arc stroke) instead of individual dots
       ctx.beginPath();
-      ctx.arc(0, 0, 3, 0, TAU);
-      ctx.fillStyle = tipGrad;
-      ctx.fill();
-      // Bore hole
+      ctx.arc(0, 0, BARREL_ORBIT_R, 0, TAU);
+      ctx.strokeStyle = 'rgba(160,165,175,0.55)';
+      ctx.lineWidth = 4;
+      ctx.stroke();
+      // Dark center bore
       ctx.beginPath();
-      ctx.arc(0, 0, 1.8, 0, TAU);
+      ctx.arc(0, 0, 2, 0, TAU);
       ctx.fillStyle = '#050507';
       ctx.fill();
-      // Bore glint
-      ctx.beginPath();
-      ctx.arc(-0.6, -0.6, 0.6, 0, TAU);
-      ctx.fillStyle = 'rgba(255,255,255,0.4)';
-      ctx.fill();
+    } else if (spoolStage === 1) {
+      // Mid-speed: arc smear behind each barrel tip
+      const smearFraction = clamp((speed - 200) / 700, 0, 1);
+      ctx.save();
+      ctx.rotate(spinRad);
+      for (let i = 0; i < NUM_BARRELS; i++) {
+        const angle = (TAU / NUM_BARRELS) * i;
+        const tx = Math.cos(angle) * BARREL_ORBIT_R;
+        const ty = Math.sin(angle) * BARREL_ORBIT_R;
+        // Smear arc
+        const arcLen = smearFraction * (TAU / NUM_BARRELS) * 0.8;
+        ctx.beginPath();
+        ctx.arc(0, 0, BARREL_ORBIT_R, angle - arcLen, angle + arcLen * 0.2);
+        ctx.strokeStyle = `rgba(140,145,155,${(smearFraction * 0.4).toFixed(3)})`;
+        ctx.lineWidth = 3.5;
+        ctx.stroke();
+        // Barrel dot (fading as smear increases)
+        const dotAlpha = 1 - smearFraction * 0.7;
+        ctx.beginPath();
+        ctx.arc(tx, ty, 3, 0, TAU);
+        ctx.fillStyle = `rgba(192,196,204,${dotAlpha.toFixed(3)})`;
+        ctx.fill();
+        ctx.beginPath();
+        ctx.arc(tx, ty, 1.8, 0, TAU);
+        ctx.fillStyle = `rgba(5,5,7,${dotAlpha.toFixed(3)})`;
+        ctx.fill();
+      }
+      ctx.restore();
+    } else {
+      // Stage 0: discrete barrel tips, depth-sorted for occlusion
+      const faceSorted = [...barrels]; // already sorted back-to-front
+      ctx.save();
+      ctx.rotate(spinRad);
+      for (const b of faceSorted) {
+        const angle = (TAU / NUM_BARRELS) * b.i;
+        const tx = Math.cos(angle) * BARREL_ORBIT_R;
+        const ty = Math.sin(angle) * BARREL_ORBIT_R;
+        const tipBr = Math.round(b.brightness * 192);
+
+        ctx.save();
+        ctx.translate(tx, ty);
+        // Tip face with radial gradient (brightness-scaled)
+        const tipGrad = ctx.createRadialGradient(-0.8, -0.8, 0, 0, 0, 3);
+        tipGrad.addColorStop(0, `rgb(${Math.min(255, tipBr + 40)},${Math.min(255, tipBr + 42)},${Math.min(255, tipBr + 44)})`);
+        tipGrad.addColorStop(1, `rgb(${Math.max(20, tipBr - 30)},${Math.max(20, tipBr - 28)},${Math.max(20, tipBr - 24)})`);
+        ctx.beginPath();
+        ctx.arc(0, 0, 3, 0, TAU);
+        ctx.fillStyle = tipGrad;
+        ctx.fill();
+        // Bore hole
+        ctx.beginPath();
+        ctx.arc(0, 0, 1.8, 0, TAU);
+        ctx.fillStyle = '#050507';
+        ctx.fill();
+        // Bore glint (only on front-facing barrels)
+        if (b.depth > 0) {
+          ctx.beginPath();
+          ctx.arc(-0.6, -0.6, 0.6, 0, TAU);
+          ctx.fillStyle = `rgba(255,255,255,${(b.depth * 0.4).toFixed(3)})`;
+          ctx.fill();
+        }
+        ctx.restore();
+      }
       ctx.restore();
     }
+
     // Center hub on muzzle face
     {
       const hubGrad = ctx.createRadialGradient(0, 0, 0, 0, 0, 3);
@@ -508,7 +695,7 @@ export class VulkanCannon extends Launcher {
       ctx.fillStyle = hubGrad;
       ctx.fill();
     }
-    ctx.restore(); // muzzle barrel spin
+    ctx.restore(); // muzzle face translate
 
     // ── 5. Heat glow overlay ──────────────────────────────────────
     if (this.overheated) {
@@ -518,7 +705,7 @@ export class VulkanCannon extends Launcher {
       ctx.shadowColor = '#FF2200';
       ctx.shadowBlur = 20;
       ctx.beginPath();
-      ctx.arc(0, -40, 20, 0, TAU);
+      ctx.arc(0, CLUSTER_CENTER_Y, 20, 0, TAU);
       ctx.fillStyle = `rgba(255, 34, 0, ${(pulse * 0.22).toFixed(3)})`;
       ctx.fill();
       ctx.shadowBlur = 0;
@@ -530,7 +717,7 @@ export class VulkanCannon extends Launcher {
       for (let li = 0; li < 3; li++) {
         const lx = randf(-14, 14);
         ctx.beginPath();
-        ctx.moveTo(lx, -24); ctx.lineTo(lx + randf(-4, 4), -58);
+        ctx.moveTo(lx, SHROUD_BOTTOM); ctx.lineTo(lx + randf(-4, 4), SHROUD_TOP);
         ctx.stroke();
       }
       ctx.restore();
@@ -541,7 +728,7 @@ export class VulkanCannon extends Launcher {
       ctx.shadowColor = '#FF2200';
       ctx.shadowBlur = 14 + t * 8;
       ctx.beginPath();
-      ctx.arc(0, -40, 16, 0, TAU);
+      ctx.arc(0, CLUSTER_CENTER_Y, 16, 0, TAU);
       ctx.fillStyle = `rgba(255, 34, 0, ${(t * pulse * 0.18).toFixed(3)})`;
       ctx.fill();
       ctx.restore();
@@ -552,7 +739,7 @@ export class VulkanCannon extends Launcher {
       ctx.shadowColor = '#FF6600';
       ctx.shadowBlur = 14 + t * 8;
       ctx.beginPath();
-      ctx.arc(0, -40, 14, 0, TAU);
+      ctx.arc(0, CLUSTER_CENTER_Y, 14, 0, TAU);
       ctx.fillStyle = `rgba(255, 102, 0, ${(t * 0.16).toFixed(3)})`;
       ctx.fill();
       ctx.restore();
@@ -560,53 +747,59 @@ export class VulkanCannon extends Launcher {
       // Stage 1: subtle warm shimmer
       const t = (this.heat - 0.5) / 0.2;
       ctx.beginPath();
-      ctx.arc(0, -40, 12, 0, TAU);
+      ctx.arc(0, CLUSTER_CENTER_Y, 12, 0, TAU);
       ctx.fillStyle = `rgba(255, 176, 64, ${(t * 0.1).toFixed(3)})`;
       ctx.fill();
     }
 
-    // ── 6. Muzzle flash ──────────────────────────────────────────
+    // ── 6. Muzzle flash — originates from active (frontmost) barrel ──
     if (this._muzzleFlashTimer > 0) {
       const flashAlpha = (this._muzzleFlashTimer / 0.04) * this._muzzleFlashIntensity;
+
+      // Active barrel x offset at muzzle face (in turret-local space)
+      // activeBarrel.bx is relative to cluster center; map to muzzle face coords
+      const activeBx = activeBarrel.bx;
       const flashLen = 22 + Math.random() * 14;
       const flashW = 9 + Math.random() * 4;
-      const muzzleY = -72;
+      // Flash originates from muzzle face position + active barrel offset
+      const muzzleY = MUZZLE_FACE_Y - 7;
+      const muzzleX = activeBx * 0.6; // compress horizontal offset slightly
 
       // Main cone
       ctx.beginPath();
-      ctx.moveTo(-flashW, muzzleY);
-      ctx.lineTo(0, muzzleY - flashLen);
-      ctx.lineTo(flashW, muzzleY);
+      ctx.moveTo(muzzleX - flashW, muzzleY);
+      ctx.lineTo(muzzleX, muzzleY - flashLen);
+      ctx.lineTo(muzzleX + flashW, muzzleY);
       ctx.closePath();
-      ctx.fillStyle = `rgba(255, 240, 150, ${(flashAlpha * 0.9).toFixed(3)})`;
+      ctx.fillStyle = `rgba(255, 235, 120, ${(flashAlpha * 0.9).toFixed(3)})`;
       ctx.fill();
 
       // Inner white core
       ctx.beginPath();
-      ctx.moveTo(-flashW * 0.4, muzzleY);
-      ctx.lineTo(0, muzzleY - flashLen * 0.7);
-      ctx.lineTo(flashW * 0.4, muzzleY);
+      ctx.moveTo(muzzleX - flashW * 0.4, muzzleY);
+      ctx.lineTo(muzzleX, muzzleY - flashLen * 0.7);
+      ctx.lineTo(muzzleX + flashW * 0.4, muzzleY);
       ctx.closePath();
       ctx.fillStyle = `rgba(255, 255, 255, ${(flashAlpha * 0.7).toFixed(3)})`;
       ctx.fill();
 
       // Side coronas
-      for (const sx of [-flashW * 1.4, flashW * 1.4]) {
+      for (const sx of [muzzleX - flashW * 1.4, muzzleX + flashW * 1.4]) {
         ctx.beginPath();
         ctx.arc(sx, muzzleY - flashLen * 0.2, flashW * 0.55, 0, TAU);
         ctx.fillStyle = `rgba(255, 200, 50, ${(flashAlpha * 0.45).toFixed(3)})`;
         ctx.fill();
       }
 
-      // Bloom
+      // Bloom centered on active barrel
       ctx.beginPath();
-      ctx.arc(0, muzzleY, 30, 0, TAU);
+      ctx.arc(muzzleX, muzzleY, 28, 0, TAU);
       ctx.fillStyle = `rgba(255, 220, 100, ${(flashAlpha * 0.15).toFixed(3)})`;
       ctx.fill();
 
       // Sparks
       for (let i = 0; i < 5; i++) {
-        const sx = randf(-flashW * 1.5, flashW * 1.5);
+        const sx = muzzleX + randf(-flashW * 1.5, flashW * 1.5);
         const sy = muzzleY - randf(3, flashLen * 0.5);
         ctx.beginPath();
         ctx.arc(sx, sy, randf(1, 2.5), 0, TAU);

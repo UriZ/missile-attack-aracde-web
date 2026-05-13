@@ -27,7 +27,8 @@ const GROUND_SPEED       = 90;   // px/s running speed
 const ATTACK_RANGE       = 35;   // px horizontal distance to trigger attack
 const COLLAPSE_DURATION  = 0.4;  // parachute crumple animation time (s)
 const FUSE_DURATION      = 1.2;  // plant-to-detonation time (s)
-const IDLE_DESPAWN_DELAY = 1.5;  // despawn delay if no targets (s)
+const IDLE_DESPAWN_DELAY = 5.0;  // despawn delay if no targets (s)
+const MAX_LIFETIME       = 30.0; // absolute max lifetime (s) — prevents wave deadlock
 const SOLDIER_GROUND_RADIUS = 12; // collision radius once on ground
 const RUN_CYCLE_SPEED    = 8.0;  // leg animation angular speed
 const RUN_LEG_AMP        = 0.35; // leg swing angle amplitude (rad)
@@ -51,6 +52,10 @@ export class Paratrooper extends Entity {
     this.vy = 0;
     this.collisionRadius = 15;
     this.groups.add('enemy_missiles');
+
+    // Lifetime tracking — prevents wave deadlock
+    /** @type {number} total seconds alive */
+    this._lifetime = 0;
 
     // State machine
     /** @type {'freefall'|'parachute'|'landed'|'running'|'attacking'|'idle'} */
@@ -94,6 +99,13 @@ export class Paratrooper extends Entity {
 
   /** @param {number} dt */
   update(dt) {
+    // Hard lifetime cap — prevents wave deadlock if trooper gets stuck
+    this._lifetime += dt;
+    if (this._lifetime >= MAX_LIFETIME) {
+      this.alive = false;
+      return;
+    }
+
     switch (this.state) {
       case 'freefall':   this._updateFreefall(dt);   break;
       case 'parachute':  this._updateParachute(dt);  break;
@@ -189,6 +201,12 @@ export class Paratrooper extends Entity {
 
   /** @param {number} dt */
   _updateRunning(dt) {
+    // Off-screen kill check
+    if (this.x < -100 || this.x > 2660 || this.y > 1600) {
+      this.alive = false;
+      return;
+    }
+
     // Keep on terrain surface (handles deformation)
     if (this.terrain) {
       this.y = this.terrain.getHeightAt(this.x);
@@ -223,6 +241,12 @@ export class Paratrooper extends Entity {
 
   /** @param {number} dt */
   _updateAttacking(dt) {
+    // Off-screen kill check
+    if (this.x < -100 || this.x > 2660 || this.y > 1600) {
+      this.alive = false;
+      return;
+    }
+
     // Stay on terrain surface
     if (this.terrain) {
       this.y = this.terrain.getHeightAt(this.x);
@@ -247,6 +271,12 @@ export class Paratrooper extends Entity {
 
   /** @param {number} dt */
   _updateIdle(dt) {
+    // Off-screen kill check
+    if (this.x < -100 || this.x > 2660 || this.y > 1600) {
+      this.alive = false;
+      return;
+    }
+
     // Stay on terrain surface
     if (this.terrain) {
       this.y = this.terrain.getHeightAt(this.x);
@@ -417,23 +447,23 @@ export class Paratrooper extends Entity {
    * @param {CanvasRenderingContext2D} ctx
    */
   _drawCanopy(ctx) {
-    // Layer 1: Canopy base — green camo radial gradient dome
+    // Layer 1: Canopy base — bright green radial gradient dome
     {
       const grad = ctx.createRadialGradient(-6, -20, 0, 0, -13, 36);
-      grad.addColorStop(0, '#8AAA6A');
-      grad.addColorStop(0.5, '#5A7A4A');
-      grad.addColorStop(1, '#3A5230');
+      grad.addColorStop(0, '#AADA70');
+      grad.addColorStop(0.5, '#7AAA5A');
+      grad.addColorStop(1, '#4A7A38');
       ctx.beginPath();
       ctx.ellipse(0, 0, 30, 25, 0, Math.PI, 0);
       ctx.closePath();
       ctx.fillStyle = grad;
       ctx.save();
-      ctx.globalAlpha = 0.95;
+      ctx.globalAlpha = 0.97;
       ctx.fill();
       ctx.restore();
     }
 
-    // Layer 2: 6 gore panels — alternating green shades
+    // Layer 2: 6 gore panels — alternating bright green shades
     for (let g = 0; g < 6; g++) {
       const x0 = GORE_X6[g];
       const x1 = GORE_X6[g + 1];
@@ -441,8 +471,8 @@ export class Paratrooper extends Entity {
       const billow = Math.sin(this.swayTime * 3.0 + g * 1.05) * 2.5;
 
       const isEven = (g % 2 === 0);
-      const skirtColor = isEven ? '#6A9050' : '#4A6838';
-      const apexColor  = isEven ? '#3A5228' : '#283A1A';
+      const skirtColor = isEven ? '#8AC060' : '#5A8840';
+      const apexColor  = isEven ? '#4A6830' : '#305020';
 
       const grad = ctx.createLinearGradient(0, 0, 0, CANOPY_APEX_Y);
       grad.addColorStop(0, skirtColor);
@@ -469,13 +499,13 @@ export class Paratrooper extends Entity {
       }
     }
 
-    // Layer 4: Canopy outline
+    // Layer 4: Canopy outline — bright edge for visibility against dark sky
     {
       ctx.beginPath();
       ctx.ellipse(0, 0, 30, 25, 0, Math.PI, 0);
       ctx.closePath();
-      ctx.strokeStyle = 'rgba(30,50,20,0.70)';
-      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = 'rgba(200,240,160,0.80)';
+      ctx.lineWidth = 2.0;
       ctx.stroke();
     }
   }

@@ -153,9 +153,12 @@ const KEYFRAMES = [
 ];
 
 // Map wave number (1-based) to target tod.
-// 8 waves = full cycle 0 → 1.
+// Cycle runs over 8 waves. Wave 1 starts at dawn (0.15) so biome colors are
+// visible from the beginning instead of the near-black pre-dawn (0.0).
+// Full cycle: wave1=dawn(0.15), wave2=morning, ..., wave8=pre-dawn, repeating.
 function _waveTod(wave) {
-  return ((wave - 1) % 8) / 8;
+  const DAWN_OFFSET = 0.15;
+  return (DAWN_OFFSET + ((wave - 1) % 8) / 8) % 1.0;
 }
 
 // ── Star data (generated once) ─────────────────────────────────────────────
@@ -179,8 +182,8 @@ const _stars = (() => {
 
 // ── Cloud layer data ─────────────────────────────────────────────────────────
 
-const FAR_CLOUD_COUNT  = 8;
-const NEAR_CLOUD_COUNT = 5;
+const FAR_CLOUD_COUNT  = 4;
+const NEAR_CLOUD_COUNT = 3;
 
 function _makeCloudLayer(count, yMin, yMax, wMin, wMax, speed) {
   const clouds = [];
@@ -518,11 +521,11 @@ export class DayNightCycle {
     ctx.save();
 
     // Far clouds — lighter, more transparent
-    const farAlpha = lerp(0.25, 0.50, 1 - starsAlpha);
+    const farAlpha = lerp(0.12, 0.25, 1 - starsAlpha);
     this._drawCloudLayer(ctx, _farClouds, skyBottom, farAlpha, 0.85);
 
     // Near clouds — denser, slightly darker
-    const nearAlpha = lerp(0.30, 0.60, 1 - starsAlpha);
+    const nearAlpha = lerp(0.15, 0.30, 1 - starsAlpha);
     const ambient = this._sample('ambient');
     // Near cloud color: blend sky_bottom with ambient
     const nearColor = [
