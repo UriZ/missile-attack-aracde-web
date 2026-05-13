@@ -190,7 +190,7 @@ export class SuperMissile extends Entity {
     if (this.parachuteDeployed) {
       ctx.save();
       ctx.translate(0, 34);
-      ctx.scale(this.deployProgress, this.deployProgress);
+      ctx.scale(this.deployProgress, -this.deployProgress); // negative y: un-flip since body rotates π when falling
       ctx.rotate(this.parachuteRotation + this.canopyLean);
 
       this._drawParachute(ctx);
