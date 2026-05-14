@@ -1,9 +1,19 @@
 /**
- * Super missile (parachute bomb) — translated from super_missile.gd.
+ * Super missile (parachute bomb) — B61-style nuclear gravity bomb.
  * Falls fast initially, deploys parachute, drifts slowly with sway.
  *
+ * Visual design: B61 "Silver Bullet" nuclear gravity bomb
+ *   - Silver metallic body with lateral gradient
+ *   - Blunt ogive nosecone (arcTo, NOT sharp triangle)
+ *   - NATO yellow safety band near nose
+ *   - Red arming/danger band near tail
+ *   - 4-fin cruciform X tail assembly
+ *   - ☢ symbol painted on body center
+ *   - Pulsing green nuclear threat aura
+ *   - Aerodynamic heating at nose (replaces rocket fire, pre-parachute only)
+ *
  * Parachute has a redesigned 9-layer rendering:
- *   1. Threat glow halo
+ *   1. Threat glow halo (green — nuclear signature)
  *   2. Drop shadow
  *   3. Canopy base (radial gradient dome)
  *   4. 8 gore panels (alternating ivory/red)
@@ -17,8 +27,7 @@
  */
 
 import { Entity } from './entity.js';
-import { rgba, randf, lerp, lerpAngle } from '../utils.js';
-import { drawPoly } from './launcher.js';
+import { randf, lerp, lerpAngle } from '../utils.js';
 
 const INITIAL_GRAVITY = 80;
 const FRAGMENT_COUNT         = 4;
@@ -32,18 +41,6 @@ const PARACHUTE_GRAVITY = 15;
 const PARACHUTE_SPEED = 120;
 const OFF_SCREEN = { bottom: 1600, left: -200, right: 2760 };
 
-// Body polygons from SCENE_DATA §8
-const BODY_GLOW    = [-22,38, 22,38, 22,-24, -22,-24];
-const BODY         = [-18,32, 18,32, 18,-20, -18,-20];
-const BODY_STRIPE1 = [-18,12, 18,12, 18,6, -18,6];
-const BODY_STRIPE2 = [-18,0, 18,0, 18,-6, -18,-6];
-const BODY_DETAIL  = [-18,-8, 18,-8, 18,-12, -18,-12];
-const WARHEAD_BAND = [-19,-18, 19,-18, 19,-22, -19,-22];
-const NOSECONE     = [-18,-20, 0,-48, 18,-20];
-const FIN_LEFT     = [-18,24, -30,38, -18,32];
-const FIN_RIGHT    = [18,24, 30,38, 18,32];
-const FIN_CENTER   = [-5,28, 5,28, 5,38, -5,38];
-
 // Canopy gore X-coordinates at skirt (y=0), 9 boundary points for 8 panels
 // GORE_X[i] = 45 * sin((i/8 - 0.5) * PI) for i = 0..8
 const GORE_X = [];
@@ -55,17 +52,28 @@ for (let i = 0; i <= 8; i++) {
 // Canopy apex (top of dome)
 const APEX_Y = -38;
 
-// Flame gradient
-const FIRE_COLORS = [
-  rgba(1, 0.95, 0.7, 1),
-  rgba(1, 0.72, 0.05, 1),
-  rgba(1, 0.3, 0, 0.85),
-  rgba(0.85, 0.08, 0, 0.4),
-  rgba(0.3, 0.02, 0, 0),
-];
-
 // Full canopy outline polygon (same shape as before — used for outline + shadow)
 const CANOPY_OUTLINE = [-45,0, -40,-20, -25,-32, 0,-38, 25,-32, 40,-20, 45,0];
+
+/**
+ * Create a lateral (left-to-right) metallic gradient for the body cylinder.
+ * Simulates upper-left lighting on a cylindrical surface.
+ * @param {CanvasRenderingContext2D} ctx
+ * @param {number} x0 - left edge X
+ * @param {number} x1 - right edge X
+ * @param {string} dark - shadow color
+ * @param {string} mid - mid-tone color
+ * @param {string} light - specular highlight color
+ */
+function metalGrad(ctx, x0, x1, dark, mid, light) {
+  const g = ctx.createLinearGradient(x0, 0, x1, 0);
+  g.addColorStop(0,    dark);
+  g.addColorStop(0.25, mid);
+  g.addColorStop(0.48, light);  // highlight slightly left-of-center (upper-left lighting)
+  g.addColorStop(0.70, mid);
+  g.addColorStop(1.0,  dark);
+  return g;
+}
 
 export class SuperMissile extends Entity {
   constructor(x, y) {
@@ -84,6 +92,9 @@ export class SuperMissile extends Entity {
     this.deployTime = 0;
     this.canopyLean = 0;      // wind lean derived from vx
 
+    // Time accumulator for pulsing nuclear aura
+    this.time = 0;
+
     /** @type {function|null} */
     this.onImpact = null;
   }
@@ -101,6 +112,8 @@ export class SuperMissile extends Entity {
   }
 
   update(dt) {
+    this.time += dt;
+
     // Deploy parachute when falling
     if (this.vy > 15.0 && !this.parachuteDeployed) {
       this.parachuteDeployed = true;
@@ -174,19 +187,198 @@ export class SuperMissile extends Entity {
     ctx.translate(this.x, this.y);
     ctx.rotate(this.rotation);
 
-    // Body
-    drawPoly(ctx, BODY_GLOW, rgba(1.0, 0.3, 0.05, 0.25));
-    drawPoly(ctx, BODY, rgba(0.28, 0.22, 0.22));
-    drawPoly(ctx, BODY_STRIPE1, rgba(0.85, 0.65, 0.0));
-    drawPoly(ctx, BODY_STRIPE2, rgba(0.85, 0.65, 0.0));
-    drawPoly(ctx, BODY_DETAIL, rgba(0.22, 0.17, 0.17));
-    drawPoly(ctx, WARHEAD_BAND, rgba(0.75, 0.72, 0.1));
-    drawPoly(ctx, NOSECONE, rgba(0.92, 0.1, 0.05));
-    drawPoly(ctx, FIN_LEFT, rgba(0.22, 0.17, 0.17));
-    drawPoly(ctx, FIN_RIGHT, rgba(0.22, 0.17, 0.17));
-    drawPoly(ctx, FIN_CENTER, rgba(0.22, 0.17, 0.17));
+    // ── Layer 1: Nuclear Threat Aura (pulsing green radial gradient) ──────────
+    {
+      // Pulse inner alpha between 0.12–0.22 at 1.8 Hz
+      const pulseAlpha = Math.sin(this.time * 1.8) * 0.05 + 0.17;
+      const grad = ctx.createRadialGradient(0, -8, 15, 0, -8, 55);
+      grad.addColorStop(0,    `rgba(60,255,90,${pulseAlpha.toFixed(3)})`);
+      grad.addColorStop(0.55, 'rgba(30,200,60,0.08)');
+      grad.addColorStop(1,    'rgba(0,180,40,0)');
+      ctx.beginPath();
+      ctx.ellipse(0, -8, 55, 50, 0, 0, Math.PI * 2);
+      ctx.fillStyle = grad;
+      ctx.fill();
+    }
 
-    // Parachute — 9-layer rendering
+    // ── Layer 8 (draw first): Cruciform Back Fins ─────────────────────────────
+    // Back fins drawn first so primary fins overlap them
+    {
+      ctx.beginPath();
+      ctx.rect(-3, 26, 6, 14);
+      ctx.fillStyle = '#5A5E62';
+      ctx.fill();
+    }
+
+    // ── Layer 7: Tail Adapter ─────────────────────────────────────────────────
+    {
+      ctx.beginPath();
+      ctx.rect(-11, 24, 22, 10);
+      ctx.fillStyle = metalGrad(ctx, -11, 11, '#545A5E', '#848C90', '#6A7075');
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(50,55,58,0.4)';
+      ctx.lineWidth = 0.8;
+      ctx.stroke();
+    }
+
+    // ── Layer 6: Red Arming/Danger Band ──────────────────────────────────────
+    {
+      // Top border
+      ctx.beginPath();
+      ctx.rect(-13, 18, 26, 6);
+      const redGrad = ctx.createLinearGradient(-13, 0, 13, 0);
+      redGrad.addColorStop(0,    '#8B1A00');
+      redGrad.addColorStop(0.35, '#CC2800');
+      redGrad.addColorStop(0.55, '#FF3C10');
+      redGrad.addColorStop(1,    '#992000');
+      ctx.fillStyle = redGrad;
+      ctx.fill();
+      // Border strokes
+      ctx.strokeStyle = 'rgba(60,10,0,0.6)';
+      ctx.lineWidth = 0.8;
+      ctx.beginPath();
+      ctx.moveTo(-13, 18); ctx.lineTo(13, 18);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(-13, 24); ctx.lineTo(13, 24);
+      ctx.stroke();
+    }
+
+    // ── Layer 2: Main Body ────────────────────────────────────────────────────
+    {
+      ctx.beginPath();
+      ctx.rect(-13, -15, 26, 33);  // y: -15 to +18
+      ctx.fillStyle = metalGrad(ctx, -13, 13, '#6A6E72', '#9EA4A8', '#D0D5D8');
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(50,55,58,0.5)';
+      ctx.lineWidth = 0.8;
+      ctx.stroke();
+
+      // Panel seam line at y=5
+      ctx.beginPath();
+      ctx.moveTo(-13, 5);
+      ctx.lineTo(13, 5);
+      ctx.strokeStyle = 'rgba(80,85,90,0.45)';
+      ctx.lineWidth = 0.8;
+      ctx.stroke();
+    }
+
+    // ── Layer 3: Fore Section (slightly wider nose adapter) ───────────────────
+    {
+      ctx.beginPath();
+      ctx.rect(-14, -28, 28, 13);  // y: -28 to -15
+      // Slightly lighter than main body
+      const foreGrad = ctx.createLinearGradient(-14, 0, 14, 0);
+      foreGrad.addColorStop(0,    '#7A8085');
+      foreGrad.addColorStop(0.25, '#AEB4B8');
+      foreGrad.addColorStop(0.48, '#E0E5E8');
+      foreGrad.addColorStop(0.70, '#C0C6CA');
+      foreGrad.addColorStop(1.0,  '#8A9095');
+      ctx.fillStyle = foreGrad;
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(50,55,58,0.4)';
+      ctx.lineWidth = 0.8;
+      ctx.stroke();
+    }
+
+    // ── Layer 4: NATO Yellow Safety Band ──────────────────────────────────────
+    {
+      ctx.beginPath();
+      ctx.rect(-14, -35, 28, 7);  // y: -35 to -28
+      const yellowGrad = ctx.createLinearGradient(-14, 0, 14, 0);
+      yellowGrad.addColorStop(0,    '#C89800');
+      yellowGrad.addColorStop(0.35, '#F5CC00');
+      yellowGrad.addColorStop(0.55, '#FFE040');
+      yellowGrad.addColorStop(1,    '#C08A00');
+      ctx.fillStyle = yellowGrad;
+      ctx.fill();
+      // Top/bottom border strokes
+      ctx.strokeStyle = 'rgba(80,60,0,0.5)';
+      ctx.lineWidth = 0.8;
+      ctx.beginPath();
+      ctx.moveTo(-14, -35); ctx.lineTo(14, -35);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(-14, -28); ctx.lineTo(14, -28);
+      ctx.stroke();
+    }
+
+    // ── Layer 5: Blunt Nosecone (dome — arcTo for smooth ogive) ──────────────
+    // This is the most critical visual change: blunt dome vs sharp triangle
+    {
+      ctx.beginPath();
+      ctx.moveTo(-13, -35);
+      // arcTo draws a smooth arc through the control point (0,-50) to the target (13,-35)
+      // radius 16 gives a nicely blunted ogive dome profile
+      ctx.arcTo(0, -50, 13, -35, 16);
+      ctx.lineTo(13, -35);
+      ctx.closePath();
+
+      const noseGrad = ctx.createRadialGradient(-5, -42, 0, 0, -36, 22);
+      noseGrad.addColorStop(0,   '#E8ECEF');  // specular hotspot, upper-left
+      noseGrad.addColorStop(0.5, '#C2C8CC');
+      noseGrad.addColorStop(1,   '#8A9095');  // shadow underside
+      ctx.fillStyle = noseGrad;
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(60,65,70,0.6)';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
+
+    // ── Layer 8 (continued): Primary Cruciform Fins (L/R delta) ──────────────
+    {
+      const finGrad = ctx.createLinearGradient(0, 26, 0, 40);
+      finGrad.addColorStop(0, '#6E7275');
+      finGrad.addColorStop(1, '#525658');
+
+      // Left fin — swept delta silhouette
+      ctx.beginPath();
+      ctx.moveTo(-13, 26);
+      ctx.lineTo(-30, 40);
+      ctx.lineTo(-22, 40);
+      ctx.lineTo(-13, 34);
+      ctx.closePath();
+      ctx.fillStyle = finGrad;
+      ctx.fill();
+      // Leading-edge highlight
+      ctx.beginPath();
+      ctx.moveTo(-13, 26);
+      ctx.lineTo(-30, 40);
+      ctx.strokeStyle = 'rgba(130,136,140,0.7)';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+
+      // Right fin — swept delta silhouette
+      ctx.beginPath();
+      ctx.moveTo(13, 26);
+      ctx.lineTo(30, 40);
+      ctx.lineTo(22, 40);
+      ctx.lineTo(13, 34);
+      ctx.closePath();
+      ctx.fillStyle = finGrad;
+      ctx.fill();
+      // Leading-edge highlight
+      ctx.beginPath();
+      ctx.moveTo(13, 26);
+      ctx.lineTo(30, 40);
+      ctx.strokeStyle = 'rgba(130,136,140,0.7)';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
+
+    // ── Layer 9: Radiation Symbol ☢ ───────────────────────────────────────────
+    {
+      ctx.font = 'bold 16px sans-serif';
+      ctx.fillStyle = 'rgba(200,165,0,0.75)';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.shadowBlur = 4;
+      ctx.shadowColor = 'rgba(255,220,0,0.4)';
+      ctx.fillText('☢', 0, 0);   // center of body
+      ctx.shadowBlur = 0;
+    }
+
+    // ── Parachute — 9-layer rendering ────────────────────────────────────────
     if (this.parachuteDeployed) {
       ctx.save();
       ctx.translate(0, 34);
@@ -198,17 +390,25 @@ export class SuperMissile extends Entity {
       ctx.restore();
     }
 
-    // Rocket fire (only before parachute)
+    // ── Layer 10: Aerodynamic Heating at Nose (replaces rocket fire) ──────────
+    // Only shown before parachute deploys — no rocket engine on a gravity bomb
     if (!this.parachuteDeployed) {
-      const flicker = 0.8 + Math.random() * 0.4;
-      for (let i = 0; i < 8; i++) {
-        const t = i / 7;
-        const cy = 32 + i * 7 * flicker;
-        const r = (8 - i) * flicker;
-        const colorIdx = Math.min(Math.floor(t * (FIRE_COLORS.length - 1)), FIRE_COLORS.length - 1);
+      const flicker = 0.3 + Math.random() * 0.25;
+      // Main heating glow at nose tip
+      const grad = ctx.createRadialGradient(0, -50, 0, 0, -50, 14);
+      grad.addColorStop(0,   `rgba(255,200,80,${flicker.toFixed(2)})`);
+      grad.addColorStop(0.5, `rgba(255,120,20,${(flicker * 0.5).toFixed(2)})`);
+      grad.addColorStop(1,   'rgba(255,60,0,0)');
+      ctx.beginPath();
+      ctx.arc(0, -50, 14, 0, Math.PI * 2);
+      ctx.fillStyle = grad;
+      ctx.fill();
+
+      // 4 ablative particle sparks streaming back from nose
+      for (let i = 0; i < 4; i++) {
         ctx.beginPath();
-        ctx.arc(randf(-3, 3), cy, r, 0, Math.PI * 2);
-        ctx.fillStyle = FIRE_COLORS[colorIdx];
+        ctx.arc(randf(-4, 4), -50 + randf(5, 20), randf(0.5, 2), 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(255,160,40,${(Math.random() * 0.6).toFixed(2)})`;
         ctx.fill();
       }
     }
@@ -223,11 +423,11 @@ export class SuperMissile extends Entity {
    * @param {CanvasRenderingContext2D} ctx
    */
   _drawParachute(ctx) {
-    // ── Layer 1: Threat Glow Halo ─────────────────────────────────────
+    // ── Layer 1: Threat Glow Halo (GREEN — nuclear signature) ─────────────────
     {
       const grad = ctx.createRadialGradient(0, -20, 0, 0, -20, 58);
-      grad.addColorStop(0, 'rgba(255,80,20,0.22)');
-      grad.addColorStop(1, 'rgba(255,0,0,0)');
+      grad.addColorStop(0, 'rgba(60,255,90,0.15)');
+      grad.addColorStop(1, 'rgba(0,180,40,0)');
       ctx.beginPath();
       // Upper half-ellipse: PI → 0 clockwise = top arc (left to right through apex)
       ctx.ellipse(0, -20, 58, 52, 0, Math.PI, 0);
@@ -236,7 +436,7 @@ export class SuperMissile extends Entity {
       ctx.fill();
     }
 
-    // ── Layer 2: Drop Shadow ──────────────────────────────────────────
+    // ── Layer 2: Drop Shadow ──────────────────────────────────────────────────
     {
       ctx.beginPath();
       // Upper half-ellipse (+5, +5 offset) for shadow — PI → 0 clockwise = top arc
@@ -246,7 +446,7 @@ export class SuperMissile extends Entity {
       ctx.fill();
     }
 
-    // ── Layer 3: Canopy Base (Radial Gradient Dome) ───────────────────
+    // ── Layer 3: Canopy Base (Radial Gradient Dome) ───────────────────────────
     {
       const grad = ctx.createRadialGradient(-8, -32, 0, 0, -19, 52);
       grad.addColorStop(0,    '#FFFFFF');
@@ -264,7 +464,7 @@ export class SuperMissile extends Entity {
       ctx.globalAlpha = 1.0;
     }
 
-    // ── Layer 4: 8 Gore Panels ────────────────────────────────────────
+    // ── Layer 4: 8 Gore Panels ────────────────────────────────────────────────
     for (let g = 0; g < 8; g++) {
       const x0 = GORE_X[g];
       const x1 = GORE_X[g + 1];
@@ -292,7 +492,7 @@ export class SuperMissile extends Entity {
       ctx.fill();
     }
 
-    // ── Layer 5: Gore Rib Lines ───────────────────────────────────────
+    // ── Layer 5: Gore Rib Lines ───────────────────────────────────────────────
     {
       ctx.strokeStyle = 'rgba(70,52,42,0.55)';
       ctx.lineWidth = 1.5;
@@ -305,7 +505,7 @@ export class SuperMissile extends Entity {
       }
     }
 
-    // ── Layer 6: Canopy Outline ───────────────────────────────────────
+    // ── Layer 6: Canopy Outline ───────────────────────────────────────────────
     {
       ctx.beginPath();
       ctx.moveTo(CANOPY_OUTLINE[0], CANOPY_OUTLINE[1]);
@@ -318,7 +518,7 @@ export class SuperMissile extends Entity {
       ctx.stroke();
     }
 
-    // ── Layer 7: Rim Highlight Arc (upper-left crescent) ─────────────
+    // ── Layer 7: Rim Highlight Arc (upper-left crescent) ─────────────────────
     {
       ctx.beginPath();
       ctx.arc(-12, -26, 36, Math.PI * 1.1, Math.PI * 1.7);
@@ -330,7 +530,7 @@ export class SuperMissile extends Entity {
       ctx.shadowBlur = 0;
     }
 
-    // ── Layer 8: Skirt Hem (dark strip at bottom) ─────────────────────
+    // ── Layer 8: Skirt Hem (dark strip at bottom) ─────────────────────────────
     {
       ctx.beginPath();
       ctx.moveTo(GORE_X[0], 0);
@@ -342,9 +542,10 @@ export class SuperMissile extends Entity {
       ctx.fill();
     }
 
-    // ── Layer 9: 8 Suspension Lines to 2 Risers ──────────────────────
+    // ── Layer 9: 8 Suspension Lines to 2 Risers ──────────────────────────────
+    // Color: cooler nylon/cord tone (vs warm tan of original)
     {
-      ctx.strokeStyle = 'rgba(200,188,158,0.87)';
+      ctx.strokeStyle = 'rgba(210,205,195,0.90)';
       ctx.lineWidth = 1.5;
       const riserL = { x: -7, y: 34 };
       const riserR = { x:  7, y: 34 };
