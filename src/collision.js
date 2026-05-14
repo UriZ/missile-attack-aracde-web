@@ -288,6 +288,36 @@ export class CollisionSystem {
       }
     }
 
+    // ── 1b. Shield vs enemy projectiles ──────────────────────────────────────
+    const shields = entityManager.getGroup('shield');
+    if (shields.length > 0) {
+      const shield = shields[0];
+      for (const enemy of enemies) {
+        if (hit.has(enemy)) continue;
+        // Transport planes fly at altitude — skip (they are above the dome)
+        if (isTransportPlane(enemy)) continue;
+        // Paratroopers handle own lifecycle
+        if (isParatrooper(enemy)) continue;
+        if (!shield.isPointInside(enemy.x, enemy.y)) continue;
+
+        if (isNuke(enemy)) {
+          // Nuke punches through — dome takes damage
+          shield.onNukePenetration(enemy.x, enemy.y);
+          game.audio.playShieldNukeHit();
+          // Nuke is NOT consumed — it continues through
+          continue;
+        }
+
+        // Enemy deflected
+        hit.add(enemy);
+        enemy.destroy();
+        spawnExplosion(entityManager, game, enemy.x, enemy.y, false);
+        shield.onDeflect(enemy.x, enemy.y);
+        game.audio.playShieldDeflect(enemy.x);
+        game.onEnemyDestroyed();
+      }
+    }
+
     // ── 2. Enemy projectiles vs terrain ──────────────────────────────
     for (const enemy of enemies) {
       if (hit.has(enemy)) continue;

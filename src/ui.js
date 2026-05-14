@@ -164,6 +164,9 @@ export class UI {
       this._drawHeatBar(ctx, sel.heat, sel.overheated);
     }
 
+    // ── Shield HUD card (bottom-right) ──
+    this._drawShieldCard(ctx, game);
+
     // ── Game Over overlay ──
     if (game.state === 'gameover') {
       this._drawGameOverOverlay(ctx, game.score);
@@ -1224,6 +1227,184 @@ export class UI {
       ctx.fillText('FIRE', mx, my + 28);
       ctx.restore();
     }
+  }
+
+  /**
+   * Shield HUD card — bottom-right corner.
+   * Shows [S] key badge, SHIELD label, 3 charge dots, and status bar.
+   * @param {CanvasRenderingContext2D} ctx
+   * @param {object} game — Game instance
+   */
+  _drawShieldCard(ctx, game) {
+    const cardX = 2290;
+    const cardY = 1300;
+    const cardW = 240;
+    const cardH = 110;
+
+    const charges = game.shieldCharges != null ? game.shieldCharges : 2;
+    const cooldown = game.shieldCooldown != null ? game.shieldCooldown : 0;
+    const activeShield = game.activeShield;
+    const isActive = activeShield && activeShield.alive;
+
+    // Determine status
+    let status; // 'READY' | 'ACTIVE' | 'COOLDOWN' | 'DEPLETED'
+    if (isActive) {
+      status = 'ACTIVE';
+    } else if (cooldown > 0) {
+      status = 'COOLDOWN';
+    } else if (charges <= 0) {
+      status = 'DEPLETED';
+    } else {
+      status = 'READY';
+    }
+
+    ctx.save();
+
+    // Card background
+    const bg = ctx.createLinearGradient(cardX, cardY, cardX, cardY + cardH);
+    bg.addColorStop(0, 'rgba(0,16,36,0.92)');
+    bg.addColorStop(1, 'rgba(0,8,20,0.92)');
+    ctx.fillStyle = bg;
+    _roundRect(ctx, cardX, cardY, cardW, cardH, 8);
+    ctx.fill();
+
+    // Border color by status
+    const borderColors = {
+      READY:    'rgba(0,180,255,0.60)',
+      ACTIVE:   'rgba(0,255,191,0.85)',
+      COOLDOWN: 'rgba(0,80,140,0.55)',
+      DEPLETED: 'rgba(80,30,30,0.55)',
+    };
+    ctx.save();
+    if (isActive) {
+      ctx.shadowColor = '#00BFFF';
+      ctx.shadowBlur = 14;
+    }
+    ctx.strokeStyle = borderColors[status];
+    ctx.lineWidth = 1.5;
+    _roundRect(ctx, cardX, cardY, cardW, cardH, 8);
+    ctx.stroke();
+    ctx.restore();
+
+    // [S] key badge — top-left
+    const badgeX = cardX + 8, badgeY = cardY + 8, badgeW = 32, badgeH = 22;
+    ctx.fillStyle = 'rgba(0,0,0,0.5)';
+    _roundRect(ctx, badgeX, badgeY, badgeW, badgeH, 5);
+    ctx.fill();
+    ctx.font = 'bold 18px monospace';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = status === 'READY' || isActive ? '#80DFFF' : '#335577';
+    ctx.fillText('[S]', badgeX + badgeW / 2, badgeY + badgeH / 2);
+
+    // "SHIELD" label
+    ctx.font = 'bold 28px monospace';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = isActive ? '#80DFFF' : status === 'READY' ? '#C0E8FF' : '#557799';
+    ctx.fillText('SHIELD', cardX + 48, cardY + cardH / 2 - 14);
+
+    // 3 charge dots — top-right area
+    const dotR = 7;
+    const dotStartX = cardX + cardW - 14;
+    const dotY = cardY + 18;
+    for (let d = 0; d < 3; d++) {
+      const filled = d < charges;
+      const dotX = dotStartX - d * (dotR * 2 + 4);
+      ctx.beginPath();
+      ctx.arc(dotX, dotY, dotR, 0, Math.PI * 2);
+      if (filled) {
+        ctx.fillStyle = '#00BFFF';
+        if (isActive && d === charges - 1) {
+          // Pulsing glow on the most recently used charge while active
+        } else {
+          ctx.shadowColor = '#00BFFF';
+          ctx.shadowBlur = 8;
+        }
+      } else {
+        ctx.fillStyle = 'rgba(0,30,50,0.85)';
+        ctx.shadowBlur = 0;
+      }
+      ctx.fill();
+      ctx.shadowBlur = 0;
+      ctx.strokeStyle = filled ? 'rgba(0,180,255,0.7)' : 'rgba(0,60,90,0.5)';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
+
+    // Status bar — bottom of card
+    const barX = cardX + 8;
+    const barY = cardY + cardH - 22;
+    const barW = cardW - 16;
+    const barH = 12;
+
+    // Bar track
+    ctx.fillStyle = 'rgba(0,10,20,0.85)';
+    _roundRect(ctx, barX, barY, barW, barH, 4);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(0,60,100,0.4)';
+    ctx.lineWidth = 1;
+    _roundRect(ctx, barX, barY, barW, barH, 4);
+    ctx.stroke();
+
+    // Bar fill
+    let fillFrac = 0;
+    let fillColor;
+    if (isActive) {
+      // Drain: from full to empty over shield duration
+      const shield = activeShield;
+      const totalPhaseTime = 0.3 + 4.4 + 0.3; // 5s
+      const elapsed = shield._elapsed || 0;
+      fillFrac = Math.max(0, 1 - elapsed / totalPhaseTime);
+      fillColor = `rgba(0,191,255,0.9)`;
+    } else if (cooldown > 0) {
+      fillFrac = 1 - cooldown / 15;
+      fillColor = `rgba(0,100,160,0.7)`;
+    } else if (charges > 0) {
+      fillFrac = 1;
+      fillColor = `rgba(0,191,255,0.9)`;
+    } else {
+      fillFrac = 0;
+      fillColor = `rgba(60,0,0,0.5)`;
+    }
+
+    if (fillFrac > 0) {
+      const fillW = fillFrac * (barW - 4);
+      if (isActive) {
+        ctx.save();
+        ctx.shadowColor = '#00BFFF';
+        ctx.shadowBlur = 6;
+      }
+      ctx.fillStyle = fillColor;
+      _roundRect(ctx, barX + 2, barY + 2, fillW, barH - 4, 3);
+      ctx.fill();
+      if (isActive) ctx.restore();
+    }
+
+    // Status text label next to bar
+    const statusLabels = {
+      READY:    { text: 'READY',    color: '#00BFFF' },
+      ACTIVE:   { text: 'ACTIVE',   color: '#00FFB0' },
+      COOLDOWN: { text: 'COOLDOWN', color: '#336688' },
+      DEPLETED: { text: 'DEPLETED', color: '#883333' },
+    };
+    const { text: statusText, color: statusColor } = statusLabels[status];
+
+    // DEPLETED blinks
+    let showLabel = true;
+    if (status === 'DEPLETED') {
+      showLabel = Math.floor(Date.now() / 500) % 2 === 0;
+    }
+
+    if (showLabel) {
+      ctx.font = 'bold 16px monospace';
+      ctx.textAlign = 'right';
+      ctx.textBaseline = 'middle';
+      ctx.fillStyle = statusColor;
+      ctx.fillText(statusText, cardX + cardW - 8, cardY + cardH / 2 + 12);
+    }
+
+    ctx.restore();
   }
 
   /**

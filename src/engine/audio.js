@@ -108,6 +108,10 @@ export class Audio {
     this.vulkanShotBuffer = null;
     this.nukeWarningBuffer = null;
     this.targetAcquiredBuffer = null;
+    this.shieldActivationBuffer = null;
+    this.shieldDeflectBuffer = null;
+    this.shieldNukeHitBuffer = null;
+    this.shieldWarningBuffer = null;
 
     this.radioChatterBuffers = [];
     this._radioChatterLoaded = false;
@@ -148,6 +152,10 @@ export class Audio {
     this.vulkanShotBuffer = this._generateVulkanShotBuffer();
     this.nukeWarningBuffer = this._generateNukeWarningBuffer();
     this.targetAcquiredBuffer = this._generateTargetAcquiredBuffer();
+    this.shieldActivationBuffer = this._generateShieldActivationBuffer();
+    this.shieldDeflectBuffer = this._generateShieldDeflectBuffer();
+    this.shieldNukeHitBuffer = this._generateShieldNukeHitBuffer();
+    this.shieldWarningBuffer = this._generateShieldWarningBuffer();
 
     this._loadRadioChatter();
     this._loadThunder();
@@ -347,6 +355,39 @@ export class Audio {
   playTargetAcquired() {
     if (!this.audioCtx) return;
     this._playBuffer(this.targetAcquiredBuffer, 6.0, randf(0.97, 1.03), 0);
+  }
+
+  /**
+   * Rising sweep 200→2000 Hz over 0.3s + noise burst — shield activation.
+   */
+  playShieldActivation() {
+    if (!this.audioCtx) return;
+    this._playBuffer(this.shieldActivationBuffer, 5.0, 1.0, 0);
+  }
+
+  /**
+   * Short noise burst + sine chirp — enemy deflected off shield.
+   * @param {number} x — world x for stereo pan
+   */
+  playShieldDeflect(x) {
+    if (!this.audioCtx) return;
+    this._playBuffer(this.shieldDeflectBuffer, 3.0, randf(0.9, 1.1), panFromX(x));
+  }
+
+  /**
+   * Distorted low rumble + crackling — nuke punched through shield.
+   */
+  playShieldNukeHit() {
+    if (!this.audioCtx) return;
+    this._playBuffer(this.shieldNukeHitBuffer, 7.0, 1.0, 0);
+  }
+
+  /**
+   * Two quick 800 Hz beeps — shield about to expire.
+   */
+  playShieldWarningBeeps() {
+    if (!this.audioCtx) return;
+    this._playBuffer(this.shieldWarningBuffer, 4.0, 1.0, 0);
   }
 
   /**
@@ -858,6 +899,150 @@ export class Audio {
     const tailSamples = Math.floor(sampleRate * 0.008);
     for (let i = 0; i < tailSamples; i++) {
       samples[numSamples - 1 - i] *= i / tailSamples;
+    }
+
+    return this._createBuffer(samples, sampleRate);
+  }
+
+  // -- Shield activation: rising sweep 200→2000 Hz over 0.3s + noise burst --
+  _generateShieldActivationBuffer() {
+    const sampleRate = 22050;
+    const duration = 0.5;
+    const numSamples = Math.floor(sampleRate * duration);
+    const samples = new Float32Array(numSamples);
+
+    for (let i = 0; i < numSamples; i++) {
+      const t = i / sampleRate;
+      const progress = t / duration;
+
+      // Envelope: quick attack, sustain, tail fade
+      let env;
+      if (t < 0.01) {
+        env = t / 0.01;
+      } else if (progress < 0.7) {
+        env = 1.0;
+      } else {
+        env = 1.0 - (progress - 0.7) / 0.3;
+      }
+
+      // Frequency sweep: 200 → 2000 Hz exponential
+      const freq = 200 * Math.pow(10.0, progress);  // log sweep
+
+      // Sweep tone
+      const sweep = Math.sin(TAU * freq * t) * 0.45;
+
+      // Noise burst (heavier at start)
+      const noiseEnv = Math.max(0, 1.0 - progress * 2.5);
+      const noise = randf(-1.0, 1.0) * noiseEnv * 0.3;
+
+      // Harmonic shimmer
+      const shimmer = Math.sin(TAU * freq * 2 * t) * 0.12;
+
+      let val = (sweep + noise + shimmer) * env;
+      val = Math.tanh(val * 1.3) / Math.tanh(1.3);
+
+      samples[i] = val;
+    }
+
+    return this._createBuffer(samples, sampleRate);
+  }
+
+  // -- Shield deflect: short noise burst + sine chirp -----------------------
+  _generateShieldDeflectBuffer() {
+    const sampleRate = 22050;
+    const duration = 0.20;
+    const numSamples = Math.floor(sampleRate * duration);
+    const samples = new Float32Array(numSamples);
+
+    for (let i = 0; i < numSamples; i++) {
+      const t = i / sampleRate;
+      const progress = t / duration;
+
+      // Sharp decay envelope
+      const env = Math.exp(-12 * t);
+
+      // Noise burst
+      const noise = randf(-1.0, 1.0) * 0.5;
+
+      // Descending chirp 1800 → 600 Hz
+      const chirpFreq = 1800 * Math.exp(-8 * t);
+      const chirp = Math.sin(TAU * chirpFreq * t) * 0.35;
+
+      let val = (noise + chirp) * env;
+      val = Math.tanh(val * 1.5) / Math.tanh(1.5);
+
+      samples[i] = val;
+    }
+
+    return this._createBuffer(samples, sampleRate);
+  }
+
+  // -- Shield nuke hit: distorted low rumble + crackling --------------------
+  _generateShieldNukeHitBuffer() {
+    const sampleRate = 22050;
+    const duration = 0.6;
+    const numSamples = Math.floor(sampleRate * duration);
+    const samples = new Float32Array(numSamples);
+
+    for (let i = 0; i < numSamples; i++) {
+      const t = i / sampleRate;
+      const progress = t / duration;
+
+      // Envelope: impact then decay
+      let env;
+      if (t < 0.01) {
+        env = t / 0.01;
+      } else {
+        env = Math.pow(1 - progress, 1.2);
+      }
+
+      // Low sub rumble
+      const sub = Math.sin(TAU * 30 * t) * 0.4;
+
+      // Mid distortion
+      const mid = Math.sin(TAU * 80 * t * (1 - progress * 0.5)) * 0.25;
+
+      // Crackling noise — high density random spikes
+      const noise = randf(-1.0, 1.0);
+      const crack = noise > 0.6 ? noise * 0.35 : 0;
+
+      // Heavy saturation for distortion
+      let val = (sub + mid + randf(-0.15, 0.15) + crack) * env;
+      val = Math.tanh(val * 3.0) / Math.tanh(3.0);
+
+      samples[i] = val;
+    }
+
+    return this._createBuffer(samples, sampleRate);
+  }
+
+  // -- Shield warning: two quick 800 Hz beeps -------------------------------
+  _generateShieldWarningBuffer() {
+    const sampleRate = 22050;
+    const duration = 0.28;
+    const numSamples = Math.floor(sampleRate * duration);
+    const samples = new Float32Array(numSamples);
+
+    const beeps = [
+      { start: 0.00, dur: 0.08 },
+      { start: 0.14, dur: 0.08 },
+    ];
+
+    for (let i = 0; i < numSamples; i++) {
+      const t = i / sampleRate;
+      let val = 0;
+
+      for (const beep of beeps) {
+        const bt = t - beep.start;
+        if (bt < 0 || bt >= beep.dur) continue;
+
+        const env = Math.min(bt / 0.004, 1.0) * Math.exp(-10 * Math.max(0, bt - 0.02));
+        val += Math.sin(TAU * 800 * bt) * 0.5 * env;
+        // Second harmonic
+        val += Math.sin(TAU * 1600 * bt) * 0.1 * env;
+      }
+
+      samples[i] = Math.tanh(val * 1.2) / Math.tanh(1.2);
     }
 
     return this._createBuffer(samples, sampleRate);

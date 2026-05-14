@@ -91,6 +91,10 @@ gh issue close NUMBER --comment "Verified by QA"
 - Team lead updates the issues with agent TLDRs after completion
 - The session log snapshots should reference issue numbers, not internal task IDs
 
+## Git Push Policy (MANDATORY)
+
+NEVER push code (`git push`) without explicit user approval. After committing, present what changed and wait for the user to approve before pushing.
+
 ## Testing (MANDATORY)
 
 All code changes MUST be tested before being considered complete. Developers must:

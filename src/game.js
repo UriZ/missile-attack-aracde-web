@@ -27,6 +27,7 @@ import { Explosion } from './explosion.js';
 import { Crater } from './crater.js';
 import { DayNightCycle } from './day-night.js';
 import { BiomeSystem } from './biome.js';
+import { MegaShield } from './entities/mega-shield.js';
 import { rgba, lerp, randf, dist } from './utils.js';
 
 // Launcher spawn positions (from main.gd / SCENE_DATA)
@@ -87,6 +88,12 @@ export class Game {
     this._vulkanSpoolLoop = null;
     this._vulkanWasFiring = false;
 
+    // Mega Shield state
+    this.shieldCharges = 2;
+    this.shieldCooldown = 0;
+    /** @type {MegaShield|null} */
+    this.activeShield = null;
+
     // Delta time for UI banner rendering
     this._lastDt = 1 / 60;
 
@@ -122,6 +129,10 @@ export class Game {
       this.ui.showWaveBanner(`WAVE ${wave} CLEAR`, rgba(0.2, 0.9, 0.3));
       // Begin gradual terrain healing during the inter-wave break.
       if (this.terrain) this.terrain.recovering = true;
+      // Every 5 waves grant +1 shield charge (max 3)
+      if (wave % 5 === 0 && this.shieldCharges < 3) {
+        this.shieldCharges = Math.min(3, this.shieldCharges + 1);
+      }
     };
 
     // Start the loop
@@ -149,6 +160,11 @@ export class Game {
     this.lockedTarget = null;
     this._vulkanSpoolLoop = null;
     this._vulkanWasFiring = false;
+
+    // Reset shield
+    this.shieldCharges = 2;
+    this.shieldCooldown = 0;
+    this.activeShield = null;
 
     // Pick biome for this game and wrap the day-night cycle
     this.biomeSystem.pickRandom();
@@ -273,6 +289,21 @@ export class Game {
       if (this.input.wasKeyPressed(String(i + 1))) {
         this._selectLauncher(i);
       }
+    }
+
+    // Mega Shield — S key
+    if (this.input.wasKeyPressed('s') || this.input.wasKeyPressed('S')) {
+      this._activateShield();
+    }
+
+    // Shield: tick cooldown, clean up expired shield
+    if (this.shieldCooldown > 0) {
+      this.shieldCooldown = Math.max(0, this.shieldCooldown - dt);
+    }
+    if (this.activeShield && !this.activeShield.alive) {
+      this.activeShield = null;
+      // Start cooldown after shield expires
+      this.shieldCooldown = 15;
     }
 
     // Truck movement via arrow keys (only when truck is selected)
@@ -427,8 +458,18 @@ export class Game {
       // Biome behind-terrain effects (e.g. riverside water band)
       this.biomeSystem.drawBehindTerrain(ctx, this.terrain);
 
+      // Shield dome interior + hex grid (drawn BEHIND entities, before shake applied)
+      if (this.activeShield && this.activeShield.alive) {
+        this.activeShield.drawInterior(ctx);
+      }
+
       // Game world (with shake) — terrain, entities
       this.entities.draw(ctx);
+
+      // Shield edge glow (drawn AFTER entities so it wraps around the scene)
+      if (this.activeShield && this.activeShield.alive) {
+        this.activeShield.drawGlow(ctx);
+      }
 
       // Biome front-of-terrain effects (snow, rain, shimmer, lightning, lens flare)
       // Drawn in UI space (no shake) so particles cover the full screen cleanly
@@ -519,6 +560,24 @@ export class Game {
         this._fireMissile(sel);
       }
     }
+  }
+
+  _activateShield() {
+    if (this.activeShield) return;       // already active
+    if (this.shieldCooldown > 0) return; // on cooldown
+    if (this.shieldCharges <= 0) return; // no charges left
+
+    this.shieldCharges--;
+    const shield = new MegaShield();
+
+    // Wire warning beep callback
+    shield.onWarningBeep = () => {
+      this.audio.playShieldWarningBeeps();
+    };
+
+    this.entities.add(shield);
+    this.activeShield = shield;
+    this.audio.playShieldActivation();
   }
 
   _fireMissile(launcher) {
