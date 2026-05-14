@@ -99,7 +99,6 @@ export class DronePad extends Launcher {
   canDeploy() {
     return this.alive &&
            this.stock > 0 &&
-           this.activeDroneCount < MAX_ACTIVE_DRONES &&
            this.deployCooldown <= 0;
   }
 

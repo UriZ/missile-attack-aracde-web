@@ -164,8 +164,7 @@ export class CollisionSystem {
         if (!circlesOverlap(proj, enemy)) continue;
 
         // ── HunterDrone special handling ──────────────────────────────
-        // The drone survives normal kills (decrements its own counter).
-        // It dies only against nukes and super missiles.
+        // Drone is a loitering munition — it explodes on every impact.
         if (isHunterDrone(proj)) {
           const droneKillsNuke   = isNuke(enemy);
           const droneKillsSuper  = isSuperMissile(enemy);
@@ -175,7 +174,7 @@ export class CollisionSystem {
             hit.add(proj);
             hit.add(enemy);
             proj.destroy();
-            spawnExplosion(entityManager, game, proj.x, proj.y, false);
+            spawnDroneKillExplosion(entityManager, game, proj.x, proj.y);
 
             if (droneKillsNuke) {
               const destroyed = enemy.takeDamage(1, false);
@@ -196,19 +195,15 @@ export class CollisionSystem {
               }
             }
           } else {
-            // Drone survives — register the kill, enemy is destroyed
+            // Drone is a loitering munition — it explodes on impact
             hit.add(enemy);
+            hit.add(proj);
             enemy.destroy();
+            proj.destroy();
 
-            // Spawn drone kill explosion at the enemy's position
+            // Spawn drone kill explosion at the impact point
             spawnDroneKillExplosion(entityManager, game, enemy.x, enemy.y);
             game.onEnemyDestroyed();
-
-            // Tell drone it made a kill (it manages its own lifecycle)
-            if (typeof proj.registerKill === 'function') {
-              proj.registerKill();
-            }
-            // Note: drone is NOT added to hit — it can continue killing
           }
           break; // done with this enemy iteration for this proj
         }

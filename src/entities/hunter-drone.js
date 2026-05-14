@@ -23,12 +23,12 @@ const SPEED_PURSUE  = 500;
 const SPEED_ATTACK  = 650;
 
 // ── Config ────────────────────────────────────────────────────────────────────
-const LAUNCH_DURATION  = 1.5;   // seconds ascending vertically
+const LAUNCH_DURATION  = 0.6;   // seconds ascending vertically
 const MAX_LIFETIME     = 12.0;  // total lifetime before expiry
 const MAX_KILLS        = 3;     // kills before expiry
 const TURN_RATE        = 3.0;   // radians/s
 const ATTACK_RANGE     = 400;   // px — switch PURSUE → ATTACK
-const SEARCH_ORBIT_R   = 260;   // radius of patrol orbit in SEARCH
+const SEARCH_ORBIT_R   = 140;   // radius of patrol orbit in SEARCH
 const EXPIRE_FADE      = 1.5;   // seconds to fade during EXPIRE
 
 // ── Wing animation ────────────────────────────────────────────────────────────
@@ -97,7 +97,7 @@ export class HunterDrone extends Entity {
     // Search orbit
     this._orbitAngle = Math.random() * TAU;
     this._orbitCx = x;
-    this._orbitCy = y - 320; // patrol center above pad
+    this._orbitCy = y - 180; // patrol center above pad
 
     // Target
     /** @type {Entity|null} */
@@ -162,6 +162,11 @@ export class HunterDrone extends Entity {
   _transitionTo(newState) {
     this.state = newState;
     this.stateTimer = 0;
+    if (newState === STATE_SEARCH) {
+      // Reset orbit center to current X but clamped to visible altitude
+      this._orbitCx = this.x;
+      this._orbitCy = Math.max(400, Math.min(900, this.y));
+    }
     if (newState === STATE_EXPIRE && this.onExpire) {
       this.onExpire();
     }
@@ -175,14 +180,6 @@ export class HunterDrone extends Entity {
     this.y += this.vy * dt;
     this.heading = -Math.PI / 2;
 
-    // Tick wing deployment
-    if (!this._wingsDeployed) {
-      this._wingDeployT = Math.min(1, this._wingDeployT + dt / WING_DEPLOY_DURATION);
-      if (this._wingDeployT >= 1) {
-        this._wingsDeployed = true;
-      }
-    }
-
     if (this.stateTimer >= LAUNCH_DURATION) {
       this._orbitCx = this.x;
       this._orbitCy = this.y;
@@ -191,6 +188,12 @@ export class HunterDrone extends Entity {
   }
 
   _updateSearch(dt) {
+    // Tick wing deployment in flight
+    if (!this._wingsDeployed) {
+      this._wingDeployT = Math.min(1, this._wingDeployT + dt / WING_DEPLOY_DURATION);
+      if (this._wingDeployT >= 1) this._wingsDeployed = true;
+    }
+
     // Circular patrol orbit
     this._orbitAngle += (SPEED_SEARCH / SEARCH_ORBIT_R) * dt;
     const targetX = this._orbitCx + Math.cos(this._orbitAngle) * SEARCH_ORBIT_R;
@@ -312,11 +315,11 @@ export class HunterDrone extends Entity {
     ctx.rotate(this.heading);
 
     // ── Wings ─────────────────────────────────────────────────────────────────
-    // Wing animation: t=0 folded (pressed against body), t=1 fully deployed
+    // Wing animation: t=0 folded (wings tucked against body), t=1 fully spread
     const deployT = Math.min(1, this._wingDeployT);
     const eased   = deployT < 1 ? easeOutBack(deployT) : 1;
-    // Clamp eased to avoid crazy values at very start
-    const wingAngle = Math.max(0, Math.min(MAX_WING_ANGLE * 1.15, MAX_WING_ANGLE * eased));
+    // At t=0: wingAngle = MAX (tucked in). At t=1: wingAngle = 0 (spread out).
+    const foldAngle = Math.max(0, Math.min(MAX_WING_ANGLE * 1.15, MAX_WING_ANGLE * (1 - eased)));
 
     // Snap flash effect: cyan highlight at overshoot peak (t 0.72–0.95)
     const inSnapWindow = deployT >= 0.72 && deployT <= 0.95;
@@ -332,7 +335,7 @@ export class HunterDrone extends Entity {
     // Upper wing (port, negative Y in local space)
     ctx.save();
     ctx.translate(-5, 0); // pivot near wing root on fuselage
-    ctx.rotate(-wingAngle); // rotate upward
+    ctx.rotate(-foldAngle); // rotate upward
     ctx.fillStyle = wingGrad;
     ctx.beginPath();
     // Swept delta wing: root at body, tip extending outward
@@ -361,7 +364,7 @@ export class HunterDrone extends Entity {
     wingGrad2.addColorStop(1, '#4A5440');
     ctx.save();
     ctx.translate(-5, 0);
-    ctx.rotate(wingAngle); // rotate downward
+    ctx.rotate(foldAngle); // rotate downward
     ctx.fillStyle = wingGrad2;
     ctx.beginPath();
     ctx.moveTo(0, 0);

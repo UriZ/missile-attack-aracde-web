@@ -495,11 +495,9 @@ export class UI {
       case 'vulkan':
         return 'VULKAN — Hold click to fire   (watch heat!)';
       case 'drone_pad': {
-        const drones = sel.activeDroneCount || 0;
-        const maxD = 2;
         const stock = sel.stock !== undefined ? sel.stock : 5;
         const cd = sel.deployCooldown > 0 ? ` (cooldown ${sel.deployCooldown.toFixed(1)}s)` : '';
-        return `HUNTER — Click to deploy autonomous drone   [${drones}/${maxD} active]  stock:[${stock}]${cd}`;
+        return `HUNTER — Click to deploy drone   stock:[${stock}]${cd}`;
       }
       default:
         return '';
