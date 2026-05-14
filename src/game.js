@@ -141,16 +141,11 @@ export class Game {
       () => this.render()
     );
 
-    // Auto-start music on the start screen
-    this.audio.autoInitMusic();
   }
 
   // ── State transitions ──────────────────────────────────────
 
   start() {
-    // Stop start-screen music when gameplay begins. Reset the stopped flag so
-    // music can play again if the user returns to the start screen.
-    this.audio.stopMusic();
     this.state = 'playing';
     this.score = 0;
     this.waveNumber = 0;
@@ -225,18 +220,6 @@ export class Game {
 
     if (this.state === 'start') {
       if (this.input.mouseJustPressed) {
-        // If AudioContext is still suspended (autoplay policy), resume it and let
-        // start-screen music play for one loop before the user can start the game.
-        // On subsequent clicks (context already running), init audio and start.
-        if (this.audio.audioCtx && this.audio.audioCtx.state === 'suspended') {
-          this.audio.audioCtx.resume().then(() => {
-            this.audio.playMusicIfReady();
-          });
-          // Don't start the game yet — wait for the user to click again
-          // so they can hear the start-screen music.
-          return;
-        }
-        // Audio context is already running — full init and start.
         this.audio.init();
         this.start();
       }

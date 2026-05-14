@@ -119,12 +119,6 @@ export class Audio {
 
     this._initialized = false;
 
-    this._musicArrayBuffer = null;
-    this._musicBuffer = null;
-    this._musicSource = null;
-    this._musicGain = null;
-    this._musicPending = false;
-    this._musicStopped = false;
   }
 
   // -----------------------------------------------------------------------
@@ -161,76 +155,6 @@ export class Audio {
     this._loadThunder();
   }
 
-  /**
-   * Pre-load the start-screen music so it is ready to play as soon as the
-   * AudioContext is resumed by the first user gesture.  Does NOT attempt to
-   * play immediately (browsers block that) — call playMusicIfReady() after
-   * resuming the context.
-   */
-  async autoInitMusic() {
-    // Create audio context early so it exists before any user interaction.
-    if (!this.audioCtx) {
-      this.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    }
-
-    // Fetch and decode the music file in the background.
-    try {
-      const resp = await fetch('assets/radio/Missile%20Strike%20(1).mp3');
-      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-      const arrayBuffer = await resp.arrayBuffer();
-      this._musicBuffer = await this.audioCtx.decodeAudioData(arrayBuffer);
-    } catch (e) {
-      console.warn('Failed to load music:', e);
-    }
-
-    // If the context is already running (e.g. user granted autoplay permission),
-    // start playing immediately.
-    if (this.audioCtx.state === 'running' && !this._musicStopped) {
-      this.playMusic();
-    }
-    // Otherwise the game will call playMusicIfReady() after the first gesture
-    // resumes the context.
-  }
-
-  /**
-   * Play start-screen music if the buffer is loaded and no music is playing.
-   * Call this after AudioContext.resume() resolves.
-   */
-  playMusicIfReady() {
-    if (this._musicBuffer && !this._musicSource && !this._musicStopped) {
-      this.playMusic();
-    }
-  }
-
-  /** Call on first user interaction to resume music if autoplay was blocked */
-  resumeMusic() {
-    if (!this.audioCtx) return;
-    this.audioCtx.resume();
-  }
-
-  playMusic() {
-    if (!this.audioCtx || !this._musicBuffer) return;
-    if (this._musicSource) return; // already playing
-    const source = this.audioCtx.createBufferSource();
-    const gain = this.audioCtx.createGain();
-    source.buffer = this._musicBuffer;
-    source.loop = true;
-    gain.gain.value = 0.4;
-    source.connect(gain);
-    gain.connect(this.audioCtx.destination);
-    source.start();
-    this._musicSource = source;
-    this._musicGain = gain;
-  }
-
-  stopMusic() {
-    this._musicStopped = true;
-    if (this._musicSource) {
-      this._musicSource.stop();
-      this._musicSource = null;
-      this._musicGain = null;
-    }
-  }
 
   async _loadThunder() {
     try {
@@ -259,6 +183,8 @@ export class Audio {
         while ((match = regex.exec(html)) !== null) {
           // Extract just the filename (strip any path prefix)
           const filename = match[1].split('/').pop();
+          // Skip the music track — it's not a radio chatter clip
+          if (filename.toLowerCase().includes('missile strike')) continue;
           filenames.push(filename);
         }
       }
