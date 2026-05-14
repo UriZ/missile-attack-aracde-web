@@ -154,16 +154,18 @@ export class Audio {
   }
 
   /**
-   * Try to start music immediately. If browser blocks autoplay,
-   * sets a flag so music starts on the next user interaction.
+   * Pre-load the start-screen music so it is ready to play as soon as the
+   * AudioContext is resumed by the first user gesture.  Does NOT attempt to
+   * play immediately (browsers block that) — call playMusicIfReady() after
+   * resuming the context.
    */
   async autoInitMusic() {
-    // Create audio context early
+    // Create audio context early so it exists before any user interaction.
     if (!this.audioCtx) {
       this.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     }
 
-    // Fetch and decode the music file
+    // Fetch and decode the music file in the background.
     try {
       const resp = await fetch('assets/radio/Missile%20Strike%20(1).mp3');
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
@@ -171,29 +173,25 @@ export class Audio {
       this._musicBuffer = await this.audioCtx.decodeAudioData(arrayBuffer);
     } catch (e) {
       console.warn('Failed to load music:', e);
-      return;
     }
 
-    // Try to play now
-    const tryPlay = () => {
-      if (this.audioCtx.state === 'running') {
-        if (!this._musicStopped) this.playMusic();
-      } else {
-        // Browser blocked autoplay — listen for ANY user gesture
-        const resume = () => {
-          this.audioCtx.resume().then(() => {
-            if (!this._musicStopped) {
-              this.playMusic();
-            }
-          });
-        };
-        document.addEventListener('click', resume, { once: true });
-        document.addEventListener('keydown', resume, { once: true });
-        document.addEventListener('pointerdown', resume, { once: true });
-      }
-    };
+    // If the context is already running (e.g. user granted autoplay permission),
+    // start playing immediately.
+    if (this.audioCtx.state === 'running' && !this._musicStopped) {
+      this.playMusic();
+    }
+    // Otherwise the game will call playMusicIfReady() after the first gesture
+    // resumes the context.
+  }
 
-    tryPlay();
+  /**
+   * Play start-screen music if the buffer is loaded and no music is playing.
+   * Call this after AudioContext.resume() resolves.
+   */
+  playMusicIfReady() {
+    if (this._musicBuffer && !this._musicSource && !this._musicStopped) {
+      this.playMusic();
+    }
   }
 
   /** Call on first user interaction to resume music if autoplay was blocked */
