@@ -119,6 +119,8 @@ Legend: ~~Strikethrough~~ = Done | **Bold** = In Progress/QA | Normal = Planned
 - have a weapon that sends out a hunter drone, that hunts for targets and kills them
 ---
 
+### 18 mega shield
+create a force field shield to temporarily protect all my assets... have limited access of those21
 ## Open Bugs
 
 | # | Title | Status |
@@ -127,7 +129,12 @@ Legend: ~~Strikethrough~~ = Done | **Bold** = In Progress/QA | Normal = Planned
 | #23 | Heat-seeker lock circle too small | Fixed, in QA |
 
 ---
+### 19 nuke interceptor 
+create a nuker interceptor - whihch allows you to shoot nukes at eney missiles1
 
+
+### 20 lazer interceptor
+- implement an intereceptor that shoots lazer beams... it takes a second to worm up...
 ## GitHub Issue Tracker
 
 | # | Title | State | Labels |

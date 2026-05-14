@@ -22,6 +22,10 @@ export class Input {
     // Internal flag set by event, consumed by update()
     this._mousePressed = false;
 
+    // Arrow key held state (for continuous truck movement)
+    this.arrowLeft = false;
+    this.arrowRight = false;
+
     // Keyboard state
     /** @type {Set<string>} keys currently held */
     this._keysDown = new Set();
@@ -62,16 +66,22 @@ export class Input {
         this._keysJustPressed.add(e.key);
       }
       this._keysDown.add(e.key);
+      if (e.key === 'ArrowLeft')  this.arrowLeft  = true;
+      if (e.key === 'ArrowRight') this.arrowRight = true;
     });
 
     window.addEventListener('keyup', (e) => {
       this._keysDown.delete(e.key);
+      if (e.key === 'ArrowLeft')  this.arrowLeft  = false;
+      if (e.key === 'ArrowRight') this.arrowRight = false;
     });
 
     // Reset state when window loses focus
     window.addEventListener('blur', () => {
       this._keysDown.clear();
       this.mouseDown = false;
+      this.arrowLeft  = false;
+      this.arrowRight = false;
     });
   }
 

@@ -11,10 +11,9 @@ import { rgba } from '../utils.js';
 const MOVE_SPEED = 120;          // px/s max speed
 const ACCELERATION = 240;        // px/s^2
 const DECELERATION = 360;        // px/s^2
-const ARRIVAL_THRESHOLD = 8;     // px — snap to destination
 const MIN_X = 80;
 const MAX_X = 2480;
-const LAUNCHER_CLEARANCE = 120;  // px — min distance from other launchers
+const LAUNCHER_CLEARANCE = 60;  // px — min distance from other launchers
 
 // Wheel rotation visual speed (radians per px of travel)
 const WHEEL_RAD_PER_PX = 1 / 10;
@@ -108,8 +107,8 @@ export class TruckLauncher extends Launcher {
     this.turretTipOffset = -62;
 
     // Movement state
-    /** @type {number|null} destination X or null when stationary */
-    this.moveTarget = null;
+    /** @type {-1|0|1} current drive direction set by moveDirection() */
+    this._moveDir = 0;
     this.currentSpeed = 0;
     /** true = moving right (cab faces right — flipped) */
     this.facingRight = false;
@@ -132,81 +131,54 @@ export class TruckLauncher extends Launcher {
   }
 
   /**
-   * Clamp targetX to avoid overlapping other launchers and world bounds.
-   * @param {number} targetX
+   * Set the drive direction for this frame.
+   * Called by game.js based on arrow-key input.
+   * @param {-1|0|1} dir  -1 = left, 0 = stop/decelerate, 1 = right
    */
-  setMoveTarget(targetX) {
-    let clamped = Math.max(MIN_X, Math.min(MAX_X, targetX));
-
-    // Push away from other launchers
-    for (const other of this._otherLaunchers) {
-      if (other === this || !other.alive) continue;
-      const gap = LAUNCHER_CLEARANCE;
-      if (Math.abs(clamped - other.x) < gap) {
-        // Choose the side that keeps us closest to the requested target
-        const leftOption  = other.x - gap;
-        const rightOption = other.x + gap;
-        clamped = Math.abs(targetX - leftOption) < Math.abs(targetX - rightOption)
-          ? leftOption
-          : rightOption;
-        clamped = Math.max(MIN_X, Math.min(MAX_X, clamped));
-      }
-    }
-
-    this.moveTarget = clamped;
+  moveDirection(dir) {
+    this._moveDir = dir;
   }
 
   /** @param {number} dt */
   update(dt) {
     super.update(dt);
 
-    if (this.moveTarget !== null) {
-      const dx = this.moveTarget - this.x;
-      const dist = Math.abs(dx);
+    if (this._moveDir !== 0) {
+      // Accelerate in the requested direction
+      this.facingRight = this._moveDir > 0;
+      this.currentSpeed = Math.min(MOVE_SPEED, this.currentSpeed + ACCELERATION * dt);
 
-      if (dist < ARRIVAL_THRESHOLD) {
-        // Snap to destination
-        this.x = this.moveTarget;
-        this.currentSpeed = 0;
-        this.moveTarget = null;
-        this.facingRight = false; // reset to default facing
-      } else {
-        // Direction sign
-        const dir = dx > 0 ? 1 : -1;
-        this.facingRight = dir > 0;
+      const move = this.currentSpeed * this._moveDir * dt;
+      this.x = Math.max(MIN_X, Math.min(MAX_X, this.x + move));
+      this.wheelAngle += move * WHEEL_RAD_PER_PX;
 
-        // Deceleration distance: v^2 / (2a)
-        const brakeDist = (this.currentSpeed * this.currentSpeed) / (2 * DECELERATION);
+      // Snap Y to terrain surface
+      if (this.terrain) {
+        this.y = this.terrain.getHeightAt(this.x);
+      }
 
-        if (dist <= brakeDist + 1) {
-          // Brake
-          this.currentSpeed = Math.max(0, this.currentSpeed - DECELERATION * dt);
-        } else {
-          // Accelerate
-          this.currentSpeed = Math.min(MOVE_SPEED, this.currentSpeed + ACCELERATION * dt);
-        }
-
-        const move = this.currentSpeed * dir * dt;
-        this.x += move;
+      // Spawn dust behind the rear of the truck
+      if (this.currentSpeed > 20 && this._dustParticles.length < 20) {
+        const rearX = this.x + (this.facingRight ? 20 : -20);
+        const groundY = this.y + 22;
+        this._dustParticles.push({
+          x: rearX + (Math.random() - 0.5) * 8,
+          y: groundY,
+          r: 4 + Math.random() * 4,
+          alpha: 0.55 + Math.random() * 0.2,
+          vr: 6 + Math.random() * 6,
+        });
+      }
+    } else {
+      // No input — decelerate to stop
+      if (this.currentSpeed > 0) {
+        this.currentSpeed = Math.max(0, this.currentSpeed - DECELERATION * dt);
+        // Keep rolling the wheels and moving until fully stopped
+        const move = this.currentSpeed * (this.facingRight ? 1 : -1) * dt;
+        this.x = Math.max(MIN_X, Math.min(MAX_X, this.x + move));
         this.wheelAngle += move * WHEEL_RAD_PER_PX;
-
-        // Snap Y to terrain surface
         if (this.terrain) {
           this.y = this.terrain.getHeightAt(this.x);
-        }
-
-        // Spawn dust behind the rear of the truck
-        if (this.currentSpeed > 20 && this._dustParticles.length < 20) {
-          // Rear wheel is at local x ~ -20 (WheelA center)
-          const rearX = this.x + (this.facingRight ? 20 : -20);
-          const groundY = this.y + 22; // base of wheel
-          this._dustParticles.push({
-            x: rearX + (Math.random() - 0.5) * 8,
-            y: groundY,
-            r: 4 + Math.random() * 4,
-            alpha: 0.55 + Math.random() * 0.2,
-            vr: 6 + Math.random() * 6,
-          });
         }
       }
     }
@@ -240,30 +212,6 @@ export class TruckLauncher extends Launcher {
       ctx.beginPath();
       ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
       ctx.fill();
-      ctx.restore();
-    }
-
-    // Draw destination marker when selected and moving
-    if (this.isSelected && this.moveTarget !== null) {
-      const mx = this.moveTarget;
-      const my = this.terrain ? this.terrain.getHeightAt(mx) : this.y;
-      ctx.save();
-      ctx.strokeStyle = 'rgba(255,160,0,0.75)';
-      ctx.lineWidth = 2;
-      ctx.setLineDash([6, 4]);
-      ctx.beginPath();
-      ctx.moveTo(this.x, this.y - 10);
-      ctx.lineTo(mx, my - 10);
-      ctx.stroke();
-      ctx.setLineDash([]);
-      // Small X marker at destination
-      const ms = 8;
-      ctx.strokeStyle = 'rgba(255,200,60,0.9)';
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.moveTo(mx - ms, my - ms - 10); ctx.lineTo(mx + ms, my + ms - 10);
-      ctx.moveTo(mx + ms, my - ms - 10); ctx.lineTo(mx - ms, my + ms - 10);
-      ctx.stroke();
       ctx.restore();
     }
 
