@@ -27,6 +27,7 @@ const BIOMES = {
     heightAmp:    0.7,
     heightFreq:   0.9,
     cloudDarkness: 0,
+    mountains:    false,
   },
   desert: {
     id: 'desert',
@@ -38,6 +39,7 @@ const BIOMES = {
     heightAmp:    1.3,
     heightFreq:   0.55,
     cloudDarkness: 0,
+    mountains:    true,
   },
   riverside: {
     id: 'riverside',
@@ -49,6 +51,7 @@ const BIOMES = {
     heightAmp:    0.85,
     heightFreq:   1.1,
     cloudDarkness: 0,
+    mountains:    false,
   },
   sunrise: {
     id: 'sunrise',
@@ -60,6 +63,7 @@ const BIOMES = {
     heightAmp:    1.0,
     heightFreq:   1.0,
     cloudDarkness: 0,
+    mountains:    false,
   },
   stormy: {
     id: 'stormy',
@@ -71,6 +75,19 @@ const BIOMES = {
     heightAmp:    1.0,
     heightFreq:   1.0,
     cloudDarkness: 0.40,
+    mountains:    true,
+  },
+  snowy_mountains: {
+    id: 'snowy_mountains',
+    groundTint:   [0.92, 0.94, 0.98],
+    grassTint:    [0.85, 0.88, 0.94],
+    skyTint:      [0.75, 0.82, 0.95],
+    hazeTint:     [0.82, 0.88, 0.98],
+    filter:       'saturate(0.3) brightness(1.25)',
+    heightAmp:    1.4,
+    heightFreq:   0.7,
+    cloudDarkness: 0,
+    mountains:    true,
   },
 };
 

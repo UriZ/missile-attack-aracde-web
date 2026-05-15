@@ -272,8 +272,11 @@ export class Terrain extends Entity {
   spawnDecorations() {
     this.decorations = [];
 
-    // Background mountains
-    this._addBackgroundMountains();
+    // Background mountains (only for biomes that have them)
+    const hasMountains = this._biomeSystem && this._biomeSystem._def && this._biomeSystem._def.mountains;
+    if (hasMountains) {
+      this._addBackgroundMountains();
+    }
 
     // Get biome for palette decisions
     const biomeId = this._biomeSystem ? (this._biomeSystem._def ? this._biomeSystem._def.id : null) : null;
@@ -281,7 +284,7 @@ export class Terrain extends Entity {
     // Scattered background vegetation (biome-aware)
     if (biomeId === 'desert') {
       this._scatterDesertVegetation();
-    } else if (biomeId === 'snow') {
+    } else if (biomeId === 'snow' || biomeId === 'snowy_mountains') {
       this._scatterSnowVegetation();
     } else {
       this._scatterTrees();
@@ -325,7 +328,7 @@ export class Terrain extends Entity {
           else if (roll < 0.50) this._addSoldierGroup(x);
           else if (roll < 0.72) this._addCactus(x);
           else this._addRockFormation(x);
-        } else if (biomeId === 'snow') {
+        } else if (biomeId === 'snow' || biomeId === 'snowy_mountains') {
           // Snow: snow-coated pines, sparse buildings, snowman
           if (roll < 0.18) this._addCivilianBuilding(x);
           else if (roll < 0.30) this._addIndustryBuilding(x);
@@ -484,7 +487,7 @@ export class Terrain extends Entity {
 
     // Snow biome: draw snow accumulation strip along terrain contour
     const biomeId = this._biomeSystem ? (this._biomeSystem._def ? this._biomeSystem._def.id : null) : null;
-    if (biomeId === 'snow') {
+    if (biomeId === 'snow' || biomeId === 'snowy_mountains') {
       this._drawSnowAccumulation(ctx, n);
     }
 
