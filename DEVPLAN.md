@@ -80,7 +80,7 @@ Legend: ~~Strikethrough~~ = Done | **Bold** = In Progress/QA | Normal = Planned
 **Status:** Partially done | **GitHub:** None
 
 - ~~Start screen: vertical gradient, scanline overlay, glowing title, pulsing CTA~~ ✅
-- ~~Game over: radial gradient overlay, triple-pass text~~ ✅
+- ~~Game over: radial gradient 1overlay, triple-pass text~~ ✅
 - Music: **Not started**
 
 ---
@@ -100,7 +100,7 @@ Legend: ~~Strikethrough~~ = Done | **Bold** = In Progress/QA | Normal = Planned
 ### 15. Soldiers
 **Status:** Planned | **GitHub:** None
 
-- Soldiers come out of military barracks and operate turrets
+- Soldiers come out of military barracks and operate turrets and use rpg
 - Not yet designed or implemented
 
 ---
@@ -112,6 +112,13 @@ Legend: ~~Strikethrough~~ = Done | **Bold** = In Progress/QA | Normal = Planned
 - Spend cash to upgrade: better scopes, better missiles, longer Vulkan duration, etc.
 - Shop/upgrade UI needed
 - Not yet designed or implemented
+- upgrade ideas
+    - missile that split into multiple missiles (for the sam and truck) mid air
+    - drones that fire missile, not just sucide drones (for the drone weapon)
+    - vulkan with auto aim
+    - double vulkan
+    - sound blaster - an upgrde to the laser beam that shoots wide sound beams that kill multiple enemies
+
 
 ---
 
@@ -135,7 +142,10 @@ create a nuker interceptor - whihch allows you to shoot nukes at eney missiles1
 
 ### 20 lazer interceptor
 - implement an intereceptor that shoots lazer beams... it takes a second to worm up...
-## GitHub Issue Tracker
+
+### 21 switch vision mode
+- support two modes: night vision and thermal 
+## GitHub Issue Tracker1
 
 | # | Title | State | Labels |
 |---|-------|-------|--------|
