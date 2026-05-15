@@ -112,12 +112,13 @@ Legend: ~~Strikethrough~~ = Done | **Bold** = In Progress/QA | Normal = Planned
 - Spend cash to upgrade: better scopes, better missiles, longer Vulkan duration, etc.
 - Shop/upgrade UI needed
 - Not yet designed or implemented
-- upgrade ideas
-    - missile that split into multiple missiles (for the sam and truck) mid air
-    - drones that fire missile, not just sucide drones (for the drone weapon)
-    - vulkan with auto aim
-    - double vulkan
-    - sound blaster - an upgrde to the laser beam that shoots wide sound beams that kill multiple enemies
+- possible upgrades
+    - a missile that splits into multiple missiles (to be used byt the sam, truck, and heat seaking)
+    - a drone that fires and not just a suicide drone
+    - a vulkan with two guns
+    - a vulkan with 4 guns (mega vulkan)
+    - a vulkan with extra ammo/more time to heat up
+    - similar to the laser beam — a sound wave that kills everything in a wide range
 
 
 ---
