@@ -107,9 +107,23 @@ export class Terrain extends Entity {
     const launcherXs = [400, 900, 1400, 1900];
     const flattenRadius = 80;
 
+    // Multiple random phases for varied terrain
     const phase1 = Math.random() * TAU;
     const phase2 = Math.random() * TAU;
     const phase3 = Math.random() * TAU;
+    const phase4 = Math.random() * TAU;
+    const phase5 = Math.random() * TAU;
+
+    // Canyon/valley positions — 1-3 deep valleys per map
+    const numValleys = randi(1, 3);
+    const valleys = [];
+    for (let vi = 0; vi < numValleys; vi++) {
+      valleys.push({
+        x: randf(300, TERRAIN_WIDTH - 300),
+        depth: randf(12, 24),
+        width: randf(200, 400),
+      });
+    }
 
     const ampScale  = this._biomeAmpScale  || 1;
     const freqScale = this._biomeFreqScale || 1;
@@ -117,11 +131,27 @@ export class Terrain extends Entity {
     for (let i = 0; i < n; i++) {
       const x = i * TERRAIN_RESOLUTION;
 
-      // Layered sine hills — scaled by biome modifiers
+      // Dramatic layered sine hills — 3-4x larger than original
       let h = 0;
-      h += Math.sin(x * 0.004 * freqScale + phase1) * 18 * ampScale;
-      h += Math.sin(x * 0.011 * freqScale + phase2) * 8  * ampScale;
-      h += Math.sin(x * 0.025 * freqScale + phase3) * 3.5 * ampScale;
+      // Large rolling mountains (primary shape)
+      h += Math.sin(x * 0.003 * freqScale + phase1) * 52 * ampScale;
+      h += Math.sin(x * 0.007 * freqScale + phase2) * 24 * ampScale;
+      // Medium ridges (secondary detail)
+      h += Math.sin(x * 0.016 * freqScale + phase3) * 12 * ampScale;
+      // High-frequency jaggedness (rocky silhouette)
+      h += Math.sin(x * 0.038 * freqScale + phase4) * 5  * ampScale;
+      h += Math.sin(x * 0.072 * freqScale + phase5) * 2.5 * ampScale;
+
+      // Canyon carving — pull terrain DOWN (positive h = lower surface in our coord system)
+      for (const v of valleys) {
+        const dist = Math.abs(x - v.x);
+        if (dist < v.width) {
+          const t = dist / v.width;
+          // Smooth U-shaped valley with steep walls
+          const valleyShape = 1 - t * t * (3 - 2 * t); // smoothstep reversed
+          h += v.depth * valleyShape;
+        }
+      }
 
       // Flatten near launcher positions
       let flattenFactor = 1;
@@ -133,7 +163,8 @@ export class Terrain extends Entity {
         }
       }
 
-      this.heights[i] = clamp(h * flattenFactor - 5, -25, 20);
+      // Clamp: allow much taller peaks (negative = raised terrain) and deeper valleys
+      this.heights[i] = clamp(h * flattenFactor - 8, -65, 35);
     }
 
     // Record the pristine shape so recovery always targets the original baseline.
@@ -241,28 +272,44 @@ export class Terrain extends Entity {
   spawnDecorations() {
     this.decorations = [];
 
-    // Background mountains
-    this._addBackgroundMountains();
+    // Background mountains (only for biomes that have them)
+    const hasMountains = this._biomeSystem && this._biomeSystem._def && this._biomeSystem._def.mountains;
+    if (hasMountains) {
+      this._addBackgroundMountains();
+    }
 
-    // Scattered trees
-    this._scatterTrees();
+    // Get biome for palette decisions
+    const biomeId = this._biomeSystem ? (this._biomeSystem._def ? this._biomeSystem._def.id : null) : null;
+
+    // Scattered background vegetation (biome-aware)
+    if (biomeId === 'desert') {
+      this._scatterDesertVegetation();
+    } else if (biomeId === 'snow' || biomeId === 'snowy_mountains') {
+      this._scatterSnowVegetation();
+    } else if (biomeId === 'pine_forest') {
+      this._scatterPineForest();
+    } else {
+      this._scatterTrees();
+    }
 
     // Zones between launchers
     const zones = [
       [50, 260], [540, 760], [1040, 1260], [1540, 1760], [2040, 2460]
     ];
 
-    // Bridges
-    const bridgeZones = [...zones];
-    _shuffle(bridgeZones);
-    const numBridges = randi(1, 2);
-    for (let bi = 0; bi < Math.min(numBridges, bridgeZones.length); bi++) {
-      const bz = bridgeZones[bi];
-      const bx = randf(bz[0] + 20, bz[1] - 100);
-      this._addBridge(bx);
+    // Bridges (not in desert — arid terrain)
+    if (biomeId !== 'desert') {
+      const bridgeZones = [...zones];
+      _shuffle(bridgeZones);
+      const numBridges = randi(1, 2);
+      for (let bi = 0; bi < Math.min(numBridges, bridgeZones.length); bi++) {
+        const bz = bridgeZones[bi];
+        const bx = randf(bz[0] + 20, bz[1] - 100);
+        this._addBridge(bx);
+      }
     }
 
-    // Fill zones with buildings, soldiers, trees/bushes
+    // Fill zones with buildings, soldiers, trees/bushes — biome-aware
     for (const zone of zones) {
       const items = randi(3, 5);
       const placed = [];
@@ -276,12 +323,35 @@ export class Terrain extends Entity {
         placed.push(x);
 
         const roll = Math.random();
-        if (roll < 0.20) this._addCivilianBuilding(x);
-        else if (roll < 0.35) this._addIndustryBuilding(x);
-        else if (roll < 0.50) this._addSoldierGroup(x);
-        else if (roll < 0.68) this._addDeciduousTree(x);
-        else if (roll < 0.82) this._addPineTree(x);
-        else this._addBushCluster(x);
+        if (biomeId === 'desert') {
+          // Desert: more rocks/cacti, some buildings, no trees
+          if (roll < 0.22) this._addCivilianBuilding(x);
+          else if (roll < 0.35) this._addIndustryBuilding(x);
+          else if (roll < 0.50) this._addSoldierGroup(x);
+          else if (roll < 0.72) this._addCactus(x);
+          else this._addRockFormation(x);
+        } else if (biomeId === 'snow' || biomeId === 'snowy_mountains') {
+          // Snow: snow-coated pines, sparse buildings, snowman
+          if (roll < 0.18) this._addCivilianBuilding(x);
+          else if (roll < 0.30) this._addIndustryBuilding(x);
+          else if (roll < 0.45) this._addSoldierGroup(x);
+          else if (roll < 0.75) this._addSnowPineTree(x);
+          else this._addRockFormation(x);
+        } else if (biomeId === 'pine_forest') {
+          // Pine forest: mostly pines, few buildings, some rocks
+          if (roll < 0.10) this._addCivilianBuilding(x);
+          else if (roll < 0.15) this._addSoldierGroup(x);
+          else if (roll < 0.85) this._addPineTree(x);
+          else this._addBushCluster(x);
+        } else {
+          // Default mixed biomes
+          if (roll < 0.20) this._addCivilianBuilding(x);
+          else if (roll < 0.35) this._addIndustryBuilding(x);
+          else if (roll < 0.50) this._addSoldierGroup(x);
+          else if (roll < 0.68) this._addDeciduousTree(x);
+          else if (roll < 0.82) this._addPineTree(x);
+          else this._addBushCluster(x);
+        }
       }
     }
 
@@ -303,8 +373,8 @@ export class Terrain extends Entity {
 
   _renderToOffscreen() {
     if (!this._offscreen) {
-      this._offscreen = this.renderer.createOffscreen(TERRAIN_WIDTH, TERRAIN_DEPTH + 300);
-      // Extra 300px above for decorations and mountains
+      this._offscreen = this.renderer.createOffscreen(TERRAIN_WIDTH, TERRAIN_DEPTH + 1200);
+      // Extra 1200px above for decorations and tall dramatic mountains
     }
 
     const ctx = this._offscreen.ctx;
@@ -312,9 +382,9 @@ export class Terrain extends Entity {
     const ch = this._offscreen.canvas.height;
     ctx.clearRect(0, 0, cw, ch);
 
-    // The offscreen canvas origin (0,0) corresponds to world (0, baseY - 300)
-    // We shift everything so terrain surface is at y=300 in offscreen space
-    const yOff = 300; // vertical offset for decorations above terrain
+    // The offscreen canvas origin (0,0) corresponds to world (0, baseY - 1200)
+    // We shift everything so terrain surface is at y=1200 in offscreen space
+    const yOff = 1200; // vertical offset for decorations above terrain
 
     ctx.save();
     ctx.translate(0, yOff);
@@ -352,12 +422,12 @@ export class Terrain extends Entity {
     if (biomeFilter && 'filter' in ctx) {
       ctx.save();
       ctx.filter = biomeFilter;
-      ctx.drawImage(this._offscreen.canvas, 0, this.baseY - 300);
+      ctx.drawImage(this._offscreen.canvas, 0, this.baseY - 1200);
       ctx.filter = 'none';
       ctx.restore();
     } else {
-      // Blit offscreen: the offscreen has 300px headroom above terrain
-      ctx.drawImage(this._offscreen.canvas, 0, this.baseY - 300);
+      // Blit offscreen: the offscreen has 1200px headroom above terrain
+      ctx.drawImage(this._offscreen.canvas, 0, this.baseY - 1200);
     }
   }
 
@@ -423,6 +493,18 @@ export class Terrain extends Entity {
     }
     ctx.stroke();
 
+    // Snow biome: draw snow accumulation strip along terrain contour
+    const biomeId = this._biomeSystem ? (this._biomeSystem._def ? this._biomeSystem._def.id : null) : null;
+    if (biomeId === 'snow' || biomeId === 'snowy_mountains') {
+      this._drawSnowAccumulation(ctx, n);
+    }
+
+    // River/water in valley regions (riverside biome draws it behind terrain;
+    // here we draw it integrated into low terrain points for other biomes)
+    if (biomeId === 'stormy' || biomeId === 'riverside') {
+      this._drawValleyWater(ctx, n);
+    }
+
     // Atmospheric haze strip at horizon
     const hazeY = -60; // relative offset above terrain surface
     const hazeGrad = ctx.createLinearGradient(0, hazeY - 20, 0, hazeY + 20);
@@ -440,18 +522,109 @@ export class Terrain extends Entity {
     ctx.fillRect(0, hazeY - 20, TERRAIN_WIDTH, 40);
   }
 
+  /**
+   * Draw a semi-transparent white snow strip following the terrain contour.
+   * Called only for snow biome.
+   */
+  _drawSnowAccumulation(ctx, n) {
+    const snowDepth = 8; // depth of snow layer on top of terrain
+    ctx.save();
+    // Base snow layer
+    ctx.fillStyle = 'rgba(220,228,240,0.75)';
+    ctx.beginPath();
+    for (let i = 0; i < n; i++) {
+      const x = i * TERRAIN_RESOLUTION;
+      if (i === 0) ctx.moveTo(x, this.heights[i]);
+      else ctx.lineTo(x, this.heights[i]);
+    }
+    for (let i = n - 1; i >= 0; i--) {
+      const x = i * TERRAIN_RESOLUTION;
+      ctx.lineTo(x, this.heights[i] + snowDepth);
+    }
+    ctx.closePath();
+    ctx.fill();
+
+    // Bright highlight on very top edge
+    ctx.strokeStyle = 'rgba(240,245,255,0.80)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    for (let i = 0; i < n; i++) {
+      const x = i * TERRAIN_RESOLUTION;
+      if (i === 0) ctx.moveTo(x, this.heights[i]);
+      else ctx.lineTo(x, this.heights[i]);
+    }
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  /**
+   * Draw water in valley areas — in low-lying terrain segments.
+   * Uses a threshold: areas near TERRAIN_DEPTH/2 or higher (lower surface)
+   * get a water tint overlay.
+   */
+  _drawValleyWater(ctx, n) {
+    // Find valley segments (areas where height is above threshold = lower terrain)
+    const valleyThreshold = 12; // heights above this are valleys
+    const waterColor1 = 'rgba(50,110,180,0.40)';
+    const waterColor2 = 'rgba(30,80,140,0.55)';
+
+    let inValley = false;
+    let valleyStart = 0;
+
+    const drawValleySegment = (startI, endI) => {
+      if (endI <= startI + 1) return;
+      ctx.save();
+      ctx.fillStyle = waterColor1;
+      ctx.beginPath();
+      // Top follows terrain
+      for (let i = startI; i <= endI; i++) {
+        const x = i * TERRAIN_RESOLUTION;
+        if (i === startI) ctx.moveTo(x, this.heights[i]);
+        else ctx.lineTo(x, this.heights[i]);
+      }
+      // Bottom flat at valley floor + small depth
+      ctx.lineTo(endI * TERRAIN_RESOLUTION, this.heights[endI] + 6);
+      for (let i = endI - 1; i >= startI; i--) {
+        ctx.lineTo(i * TERRAIN_RESOLUTION, this.heights[i] + 6);
+      }
+      ctx.closePath();
+      ctx.fill();
+
+      // Ripple highlight
+      ctx.strokeStyle = 'rgba(180,220,255,0.25)';
+      ctx.lineWidth = 1;
+      const cx = ((startI + endI) * 0.5) * TERRAIN_RESOLUTION;
+      const cy = this.heights[Math.floor((startI + endI) * 0.5)] + 3;
+      ctx.beginPath();
+      ctx.moveTo(cx - 15, cy);
+      ctx.quadraticCurveTo(cx, cy - 3, cx + 15, cy);
+      ctx.stroke();
+      ctx.restore();
+    };
+
+    for (let i = 0; i < n; i++) {
+      const isLow = this.heights[i] > valleyThreshold;
+      if (isLow && !inValley) {
+        inValley = true;
+        valleyStart = i;
+      } else if (!isLow && inValley) {
+        drawValleySegment(valleyStart, i);
+        inValley = false;
+      }
+    }
+    if (inValley) drawValleySegment(valleyStart, n - 1);
+  }
+
   // ── Background Mountains ──────────────────────────────────
 
   _addBackgroundMountains() {
-    // Layer 1: far distant — #161C28 (layerIndex 0)
-    this._addMountainLayer(0, 0.086, 0.110, 0.157, 0.88, -280, 160, 5, 0.6, true);
-    // Layer 2: mid-distance — #1C2430 (layerIndex 1)
-    this._addMountainLayer(1, 0.110, 0.141, 0.188, 0.85, -180, 120, 7, 0.8, false);
-    // Layer 3: nearby hills — #222C20 (layerIndex 2)
-    this._addMountainLayer(2, 0.133, 0.173, 0.125, 0.80, -100, 80, 10, 1.0, false);
-    // Snow caps on far mountains (alpha 0.7, second layer)
-    this._addSnowCaps(-280, 160, 5);
-    this._addSnowCapsSecond(-280, 160, 5);
+    // Layer 1: far distant — #161C28 (layerIndex 0) — massive peaks
+    this._addMountainLayer(0, 0.086, 0.110, 0.157, 0.90, -680, 420, 5, 0.55, true);
+    // Layer 2: mid-distance — #1C2430 (layerIndex 1) — tall ridges
+    this._addMountainLayer(1, 0.110, 0.141, 0.188, 0.87, -460, 310, 7, 0.75, false);
+    // Layer 3: nearby hills — #222C20 (layerIndex 2) — jagged foreground
+    this._addMountainLayer(2, 0.133, 0.173, 0.125, 0.82, -260, 195, 10, 1.0, false);
+    // Snow caps removed per user request
   }
 
   /**
@@ -460,23 +633,19 @@ export class Terrain extends Entity {
    * @returns {string} CSS color string
    */
   _getMountainColor(layerIndex, baseR, baseG, baseB, baseA) {
-    if (!this._dayNight) {
-      return rgba(baseR, baseG, baseB, baseA);
-    }
-    const ambient = this._dayNight.getAmbientColor();
-    // Blend base color with ambient — mountains pick up lighting from environment
-    // Stronger ambient influence on near layer (layerIndex 2), weak on far
-    const blendFactors = [0.55, 0.45, 0.35];
-    const bf = blendFactors[layerIndex] || 0.45;
-    const r = baseR * (1 - bf) + ambient[0] * bf;
-    const g = baseG * (1 - bf) + ambient[1] * bf;
-    const b = baseB * (1 - bf) + ambient[2] * bf;
-    return rgba(r, g, b, baseA);
+    // Mountains use fixed colors — no day/night tinting.
+    // This keeps the terrain stable and prevents mountains from washing out
+    // or disappearing during sunrise/sunset ambient shifts.
+    return rgba(baseR, baseG, baseB, baseA);
   }
 
   _addMountainLayer(layerIndex, r, g, b, a, baseY, maxHeight, numPeaks, jaggedness, hasSnow) {
-    const phase = Math.random() * TAU;
-    const steps = numPeaks * 6;
+    const phase  = Math.random() * TAU;
+    const phase2 = Math.random() * TAU;
+    const phase3 = Math.random() * TAU;
+    const phase4 = Math.random() * TAU;
+    // Use more steps for smoother but more detailed silhouettes
+    const steps = numPeaks * 12;
     const terrain = this;
 
     const drawFn = (ctx) => {
@@ -487,10 +656,15 @@ export class Terrain extends Entity {
         const t = i / steps;
         const x = t * TERRAIN_WIDTH;
         let h = 0;
-        h += Math.sin(t * Math.PI * numPeaks + phase) * maxHeight * 0.5;
-        h += Math.sin(t * Math.PI * numPeaks * 2.3 + phase * 1.7) * maxHeight * 0.25 * jaggedness;
-        h += Math.sin(t * Math.PI * numPeaks * 5.1 + phase * 3.2) * maxHeight * 0.08 * jaggedness;
-        h = Math.max(h, 8);
+        // Primary large peaks
+        h += Math.sin(t * Math.PI * numPeaks + phase) * maxHeight * 0.50;
+        // Secondary ridges for visual complexity
+        h += Math.sin(t * Math.PI * numPeaks * 2.3 + phase2) * maxHeight * 0.28 * jaggedness;
+        h += Math.sin(t * Math.PI * numPeaks * 4.7 + phase3) * maxHeight * 0.12 * jaggedness;
+        // High-freq rocky texture
+        h += Math.sin(t * Math.PI * numPeaks * 9.1 + phase4) * maxHeight * 0.04 * jaggedness;
+        // Keep minimum height so mountains always fill bottom
+        h = Math.max(h, 12);
         ctx.lineTo(x, baseY - h);
       }
       ctx.lineTo(TERRAIN_WIDTH, 0);
@@ -501,78 +675,6 @@ export class Terrain extends Entity {
     this.decorations.push(d);
   }
 
-  _addSnowCaps(baseY, maxHeight, numPeaks) {
-    const phase = Math.random() * TAU;
-    const steps = numPeaks * 6;
-    const snowColor = rgba(0.85, 0.88, 0.92, 0.7); // alpha 0.7 per spec
-
-    // Collect snow cap triangles
-    const caps = [];
-    for (let i = 0; i < steps; i++) {
-      const t = i / steps;
-      const x = t * TERRAIN_WIDTH;
-      let h = 0;
-      h += Math.sin(t * Math.PI * numPeaks + phase) * maxHeight * 0.5;
-      h += Math.sin(t * Math.PI * numPeaks * 2.3 + phase * 1.7) * maxHeight * 0.25 * 0.6;
-      h += Math.sin(t * Math.PI * numPeaks * 5.1 + phase * 3.2) * maxHeight * 0.08 * 0.6;
-
-      if (h > maxHeight * 0.6) {
-        const snowH = (h - maxHeight * 0.6) * 0.4;
-        const peakY = baseY - h;
-        const sw = randf(15, 30);
-        caps.push({ x, peakY, snowH, sw });
-      }
-    }
-
-    const drawFn = (ctx) => {
-      ctx.fillStyle = snowColor;
-      for (const c of caps) {
-        ctx.beginPath();
-        ctx.moveTo(c.x - c.sw * 0.5, c.peakY + c.snowH * 0.5);
-        ctx.lineTo(c.x, c.peakY - c.snowH);
-        ctx.lineTo(c.x + c.sw * 0.5, c.peakY + c.snowH * 0.5);
-        ctx.closePath();
-        ctx.fill();
-      }
-    };
-    this.decorations.push({ x: 0, width: TERRAIN_WIDTH, drawFn, _isMountain: true });
-  }
-
-  /** Second snow cap layer — slightly offset for depth. */
-  _addSnowCapsSecond(baseY, maxHeight, numPeaks) {
-    const phase = Math.random() * TAU;
-    const steps = numPeaks * 6;
-    const snowColor = rgba(0.92, 0.94, 0.97, 0.45);
-
-    const caps = [];
-    for (let i = 0; i < steps; i++) {
-      const t = i / steps;
-      let h = 0;
-      h += Math.sin(t * Math.PI * numPeaks + phase) * maxHeight * 0.5;
-      h += Math.sin(t * Math.PI * numPeaks * 2.3 + phase * 1.7) * maxHeight * 0.25 * 0.6;
-      h += Math.sin(t * Math.PI * numPeaks * 5.1 + phase * 3.2) * maxHeight * 0.08 * 0.6;
-      const x = t * TERRAIN_WIDTH;
-      if (h > maxHeight * 0.72) {
-        const snowH = (h - maxHeight * 0.72) * 0.3;
-        const peakY = baseY - h;
-        const sw = randf(8, 18);
-        caps.push({ x, peakY, snowH, sw });
-      }
-    }
-
-    const drawFn = (ctx) => {
-      ctx.fillStyle = snowColor;
-      for (const c of caps) {
-        ctx.beginPath();
-        ctx.moveTo(c.x - c.sw * 0.3, c.peakY + c.snowH * 0.4);
-        ctx.lineTo(c.x, c.peakY - c.snowH);
-        ctx.lineTo(c.x + c.sw * 0.3, c.peakY + c.snowH * 0.4);
-        ctx.closePath();
-        ctx.fill();
-      }
-    };
-    this.decorations.push({ x: 0, width: TERRAIN_WIDTH, drawFn, _isMountain: true });
-  }
 
   // ── Scattered trees ────────────────────────────────────────
 
@@ -595,6 +697,29 @@ export class Terrain extends Entity {
       const roll = Math.random();
       if (roll < 0.40) this._addPineTree(tx, terrainY);
       else if (roll < 0.75) this._addDeciduousTree(tx, terrainY);
+      else this._addBushCluster(tx, terrainY);
+    }
+  }
+
+  _scatterPineForest() {
+    const launcherXs = [400, 900, 1400, 1900];
+    const treeClear = 70;
+    // Dense pine forest — more trees than normal
+    const numTrees = randi(35, 50);
+
+    for (let ti = 0; ti < numTrees; ti++) {
+      const tx = randf(30, TERRAIN_WIDTH - 30);
+      let nearLauncher = false;
+      for (const lx of launcherXs) {
+        if (Math.abs(tx - lx) < treeClear) { nearLauncher = true; break; }
+      }
+      if (nearLauncher) continue;
+
+      const sampleI = clamp(Math.floor(tx / TERRAIN_RESOLUTION), 0, this.heights.length - 1);
+      const terrainY = this.heights[sampleI];
+
+      const roll = Math.random();
+      if (roll < 0.80) this._addPineTree(tx, terrainY);
       else this._addBushCluster(tx, terrainY);
     }
   }
@@ -945,6 +1070,356 @@ export class Terrain extends Entity {
     this._registerDecoration(x, spread, drawFn);
   }
 
+  // ── Desert cactus ─────────────────────────────────────────
+
+  _addCactus(x, yOffset = 0) {
+    const trunkH  = randf(30, 55);
+    const trunkW  = randf(7, 11);
+    const armType = Math.random(); // 0=tall single, 0.5=two arms, 1=saguaro
+
+    const cactusGreen = pickRandom([
+      [0.22, 0.45, 0.20], [0.18, 0.40, 0.17],
+      [0.25, 0.50, 0.22], [0.20, 0.42, 0.18],
+    ]);
+    const darkGreen = darken(...cactusGreen, 0.22);
+
+    // Arms data
+    const arms = [];
+    if (armType > 0.35) {
+      const numArms = armType > 0.65 ? 2 : 1;
+      for (let ai = 0; ai < numArms; ai++) {
+        const side  = ai % 2 === 0 ? 1 : -1;
+        const armY  = -trunkH * randf(0.45, 0.70);
+        const armL  = randf(14, 24);
+        const armH  = randf(10, 18);
+        const armW  = trunkW * 0.65;
+        arms.push({ side, armY, armL, armH, armW });
+      }
+    }
+
+    // Spine dots
+    const numSpines = Math.floor(trunkH / 6);
+    const spines = [];
+    for (let si = 0; si < numSpines; si++) {
+      spines.push({
+        y:    -si * (trunkH / numSpines) - 4,
+        side: (si % 2 === 0) ? 1 : -1,
+      });
+    }
+
+    const drawFn = (ctx) => {
+      ctx.save();
+      ctx.translate(x, yOffset);
+
+      // Shadow
+      ctx.fillStyle = rgba(0.10, 0.08, 0.04, 0.30);
+      ctx.beginPath();
+      for (let si = 0; si < 10; si++) {
+        const angle = TAU * si / 10;
+        const px = Math.cos(angle) * trunkW * 1.2;
+        const py = Math.sin(angle) * 4 + 3;
+        if (si === 0) ctx.moveTo(px, py);
+        else ctx.lineTo(px, py);
+      }
+      ctx.closePath();
+      ctx.fill();
+
+      // Arms
+      for (const arm of arms) {
+        const armBaseX = arm.side > 0 ? trunkW * 0.4 : -trunkW * 0.4 - arm.armL;
+        // Horizontal segment
+        _fillRect(ctx, armBaseX, arm.armY - arm.armW * 0.5, arm.armL, arm.armW, rgba(...cactusGreen));
+        // Vertical tip
+        const tipX = arm.side > 0
+          ? trunkW * 0.4 + arm.armL - arm.armW * 0.5
+          : -trunkW * 0.4 - arm.armW * 0.5;
+        _fillRect(ctx, tipX, arm.armY - arm.armH, arm.armW, arm.armH, rgba(...cactusGreen));
+        // Shadow
+        _fillRect(ctx, armBaseX + arm.armL * 0.5, arm.armY - arm.armW * 0.5, arm.armL * 0.4, arm.armW, rgba(...darkGreen, 0.6));
+      }
+
+      // Main trunk
+      ctx.fillStyle = rgba(...cactusGreen);
+      ctx.beginPath();
+      ctx.moveTo(-trunkW * 0.5, 0);
+      ctx.lineTo(trunkW * 0.5, 0);
+      ctx.lineTo(trunkW * 0.42, -trunkH);
+      ctx.lineTo(-trunkW * 0.42, -trunkH);
+      ctx.closePath();
+      ctx.fill();
+
+      // Trunk shadow (right edge)
+      ctx.fillStyle = rgba(...darkGreen);
+      ctx.beginPath();
+      ctx.moveTo(trunkW * 0.15, 0);
+      ctx.lineTo(trunkW * 0.5, 0);
+      ctx.lineTo(trunkW * 0.42, -trunkH);
+      ctx.lineTo(trunkW * 0.15, -trunkH);
+      ctx.closePath();
+      ctx.fill();
+
+      // Top rounded crown
+      ctx.fillStyle = rgba(...cactusGreen);
+      ctx.beginPath();
+      for (let si = 0; si <= 10; si++) {
+        const angle = Math.PI * si / 10;
+        const px = Math.cos(angle) * trunkW * 0.48;
+        const py = -trunkH + Math.sin(angle) * (-trunkW * 0.55);
+        if (si === 0) ctx.moveTo(px, py);
+        else ctx.lineTo(px, py);
+      }
+      ctx.lineTo(trunkW * 0.42, -trunkH);
+      ctx.lineTo(-trunkW * 0.42, -trunkH);
+      ctx.closePath();
+      ctx.fill();
+
+      // Spine dots
+      for (const sp of spines) {
+        const sx = sp.side * (trunkW * 0.52);
+        _fillRect(ctx, sx - 1, sp.y - 1, 2, 2, rgba(0.72, 0.68, 0.52, 0.65));
+      }
+
+      ctx.restore();
+    };
+
+    this._registerDecoration(x, trunkW + (arms.length > 0 ? 28 : 0), drawFn);
+  }
+
+  // ── Rock formation ────────────────────────────────────────
+
+  _addRockFormation(x, yOffset = 0) {
+    const numRocks = randi(2, 5);
+    const spread   = numRocks * randf(12, 18);
+
+    const rockColors = [
+      [0.48, 0.42, 0.36], [0.52, 0.46, 0.38],
+      [0.44, 0.40, 0.35], [0.56, 0.50, 0.42],
+      [0.50, 0.44, 0.38],
+    ];
+
+    const rocks = [];
+    for (let ri = 0; ri < numRocks; ri++) {
+      const rx  = randf(-spread * 0.5, spread * 0.5);
+      const rw  = randf(16, 36);
+      const rh  = randf(12, 28);
+      const col = pickRandom(rockColors);
+      const dk  = darken(...col, 0.20);
+      const hl  = lighten(...col, 0.18);
+
+      // Pre-gen polygon points (irregular polygon, flat-bottomed)
+      const numSides = randi(5, 7);
+      const pts = [];
+      for (let si = 0; si < numSides; si++) {
+        const angle  = TAU * si / numSides + randf(-0.3, 0.3);
+        const radiusX = rw * 0.5 * randf(0.7, 1.0);
+        const radiusY = rh * 0.5 * randf(0.6, 1.0);
+        // Flatten bottom
+        const sy = Math.sin(angle);
+        const ry = sy < 0 ? sy * radiusY : sy * radiusY * 0.35;
+        pts.push([Math.cos(angle) * radiusX, ry - rh * 0.22]);
+      }
+
+      rocks.push({ rx, rw, rh, col, dk, hl, pts });
+    }
+
+    const drawFn = (ctx) => {
+      ctx.save();
+      ctx.translate(x, yOffset);
+
+      for (const rock of rocks) {
+        // Shadow
+        ctx.fillStyle = rgba(0.08, 0.07, 0.05, 0.28);
+        ctx.beginPath();
+        for (let si = 0; si < 8; si++) {
+          const angle = TAU * si / 8;
+          const px = rock.rx + Math.cos(angle) * rock.rw * 0.52;
+          const py = Math.sin(angle) * 4 + 3;
+          if (si === 0) ctx.moveTo(px, py);
+          else ctx.lineTo(px, py);
+        }
+        ctx.closePath();
+        ctx.fill();
+
+        // Main body
+        ctx.fillStyle = rgba(...rock.col);
+        ctx.beginPath();
+        ctx.moveTo(rock.rx + rock.pts[0][0], rock.pts[0][1]);
+        for (let i = 1; i < rock.pts.length; i++) {
+          ctx.lineTo(rock.rx + rock.pts[i][0], rock.pts[i][1]);
+        }
+        ctx.closePath();
+        ctx.fill();
+
+        // Dark shadow side (right portion)
+        ctx.fillStyle = rgba(...rock.dk, 0.65);
+        ctx.beginPath();
+        ctx.moveTo(rock.rx + rock.rw * 0.05, -rock.rh * 0.22);
+        ctx.lineTo(rock.rx + rock.rw * 0.50, -rock.rh * 0.08);
+        ctx.lineTo(rock.rx + rock.rw * 0.48, rock.rh * 0.10);
+        ctx.lineTo(rock.rx + rock.rw * 0.10, rock.rh * 0.10);
+        ctx.closePath();
+        ctx.fill();
+
+        // Highlight (upper-left)
+        ctx.fillStyle = rgba(...rock.hl, 0.42);
+        ctx.beginPath();
+        ctx.moveTo(rock.rx - rock.rw * 0.20, -rock.rh * 0.42);
+        ctx.lineTo(rock.rx - rock.rw * 0.02, -rock.rh * 0.52);
+        ctx.lineTo(rock.rx + rock.rw * 0.08, -rock.rh * 0.28);
+        ctx.lineTo(rock.rx - rock.rw * 0.15, -rock.rh * 0.20);
+        ctx.closePath();
+        ctx.fill();
+      }
+
+      ctx.restore();
+    };
+
+    this._registerDecoration(x, spread, drawFn);
+  }
+
+  // ── Snow-heavy pine tree (snow biome) ─────────────────────
+
+  _addSnowPineTree(x, yOffset = 0) {
+    const trunkH    = randf(18, 30);
+    const trunkW    = randf(3.5, 5.5);
+    const treeH     = randf(45, 75);
+    const baseWidth = randf(20, 34);
+    const trunkColor = [0.28, 0.20, 0.14];
+    const pineColor  = [0.10, 0.22, 0.12];
+
+    const numTiers    = randi(4, 6);
+    const canopyStart = -trunkH * 0.6;
+    const tierH       = (treeH - trunkH * 0.4) / numTiers;
+
+    // Each tier gets snow coverage fraction
+    const snowTiers = [];
+    for (let ti = 0; ti < numTiers; ti++) {
+      const ty        = canopyStart - ti * tierH * 0.75;
+      const tw        = baseWidth * (1 - ti * 0.15);
+      const th        = tierH * 1.1;
+      const snowCover = randf(0.30, 0.65);
+      snowTiers.push({ ty, tw, th, snowCover });
+    }
+
+    const drawFn = (ctx) => {
+      ctx.save();
+      ctx.translate(x, yOffset);
+
+      // Shadow
+      ctx.fillStyle = rgba(0.06, 0.08, 0.10, 0.22);
+      ctx.beginPath();
+      for (let si = 0; si < 10; si++) {
+        const angle = TAU * si / 10;
+        const px = Math.cos(angle) * baseWidth * 0.6;
+        const py = Math.sin(angle) * 3.5 + 2;
+        if (si === 0) ctx.moveTo(px, py);
+        else ctx.lineTo(px, py);
+      }
+      ctx.closePath();
+      ctx.fill();
+
+      // Trunk
+      ctx.fillStyle = rgba(...trunkColor);
+      ctx.beginPath();
+      ctx.moveTo(-trunkW * 0.5, 0);
+      ctx.lineTo(trunkW * 0.5, 0);
+      ctx.lineTo(trunkW * 0.3, -trunkH);
+      ctx.lineTo(-trunkW * 0.3, -trunkH);
+      ctx.closePath();
+      ctx.fill();
+
+      // Pine tiers
+      for (let ti = 0; ti < numTiers; ti++) {
+        const ty = canopyStart - ti * tierH * 0.75;
+        const tw = baseWidth * (1 - ti * 0.15);
+        const th = tierH * 1.1;
+        ctx.fillStyle = rgba(...pineColor);
+        ctx.beginPath();
+        ctx.moveTo(-tw * 0.5, ty);
+        ctx.lineTo(tw * 0.5, ty);
+        ctx.lineTo(0, ty - th);
+        ctx.closePath();
+        ctx.fill();
+      }
+
+      // Heavy snow on each tier
+      for (const s of snowTiers) {
+        const sw = s.tw * s.snowCover;
+        // Snow cap
+        ctx.fillStyle = rgba(0.88, 0.91, 0.95, 0.92);
+        ctx.beginPath();
+        ctx.moveTo(-sw * 0.5, s.ty - s.th * 0.12);
+        ctx.lineTo(sw * 0.5, s.ty - s.th * 0.12);
+        ctx.lineTo(0, s.ty - s.th - 2);
+        ctx.closePath();
+        ctx.fill();
+
+        // Snow droop edges
+        ctx.fillStyle = rgba(0.85, 0.88, 0.93, 0.62);
+        ctx.beginPath();
+        ctx.moveTo(-s.tw * 0.5, s.ty);
+        ctx.lineTo(-s.tw * 0.5 + sw * 0.15, s.ty + 5);
+        ctx.lineTo(-s.tw * 0.5 + sw * 0.40, s.ty);
+        ctx.closePath();
+        ctx.fill();
+        ctx.beginPath();
+        ctx.moveTo(s.tw * 0.5, s.ty);
+        ctx.lineTo(s.tw * 0.5 - sw * 0.15, s.ty + 5);
+        ctx.lineTo(s.tw * 0.5 - sw * 0.40, s.ty);
+        ctx.closePath();
+        ctx.fill();
+      }
+
+      ctx.restore();
+    };
+
+    this._registerDecoration(x, baseWidth, drawFn);
+  }
+
+  // ── Desert scattered vegetation ───────────────────────────
+
+  _scatterDesertVegetation() {
+    const launcherXs  = [400, 900, 1400, 1900];
+    const clearRadius = 70;
+    const numItems    = randi(12, 22);
+
+    for (let ti = 0; ti < numItems; ti++) {
+      const tx = randf(30, TERRAIN_WIDTH - 30);
+      let near = false;
+      for (const lx of launcherXs) {
+        if (Math.abs(tx - lx) < clearRadius) { near = true; break; }
+      }
+      if (near) continue;
+
+      const sampleI = clamp(Math.floor(tx / TERRAIN_RESOLUTION), 0, this.heights.length - 1);
+      const terrainY = this.heights[sampleI];
+      if (Math.random() < 0.55) this._addCactus(tx, terrainY);
+      else this._addRockFormation(tx, terrainY);
+    }
+  }
+
+  // ── Snow biome scattered vegetation ──────────────────────
+
+  _scatterSnowVegetation() {
+    const launcherXs  = [400, 900, 1400, 1900];
+    const clearRadius = 70;
+    const numItems    = randi(15, 25);
+
+    for (let ti = 0; ti < numItems; ti++) {
+      const tx = randf(30, TERRAIN_WIDTH - 30);
+      let near = false;
+      for (const lx of launcherXs) {
+        if (Math.abs(tx - lx) < clearRadius) { near = true; break; }
+      }
+      if (near) continue;
+
+      const sampleI = clamp(Math.floor(tx / TERRAIN_RESOLUTION), 0, this.heights.length - 1);
+      const terrainY = this.heights[sampleI];
+      if (Math.random() < 0.65) this._addSnowPineTree(tx, terrainY);
+      else this._addRockFormation(tx, terrainY);
+    }
+  }
+
   // ── Civilian building ──────────────────────────────────────
 
   _addCivilianBuilding(x) {
@@ -1025,6 +1500,28 @@ export class Terrain extends Entity {
       // Ridge cap
       const rx = w * 0.5;
       _fillRect(ctx, rx - 3, -h - roofH - 2, 6, 3, rgba(...darken(...roofColor, 0.25)));
+
+      // Snow cap on roof (snow biome only)
+      const biomeId_bld = terrain._biomeSystem ? (terrain._biomeSystem._def ? terrain._biomeSystem._def.id : null) : null;
+      if (biomeId_bld === 'snow') {
+        // Snow layer on both sides of pitched roof
+        const snowDepth = 4;
+        ctx.fillStyle = 'rgba(218,226,240,0.82)';
+        ctx.beginPath();
+        ctx.moveTo(-overhang, -h);
+        ctx.lineTo(w * 0.5, -h - roofH);
+        ctx.lineTo(w * 0.5 - snowDepth * 0.8, -h - roofH + snowDepth);
+        ctx.lineTo(-overhang + snowDepth * 1.5, -h + snowDepth * 0.5);
+        ctx.closePath();
+        ctx.fill();
+        ctx.beginPath();
+        ctx.moveTo(w * 0.5, -h - roofH);
+        ctx.lineTo(w + overhang, -h);
+        ctx.lineTo(w + overhang - snowDepth * 1.5, -h + snowDepth * 0.5);
+        ctx.lineTo(w * 0.5 + snowDepth * 0.8, -h - roofH + snowDepth);
+        ctx.closePath();
+        ctx.fill();
+      }
 
       // Chimney
       if (hasChimney) {
