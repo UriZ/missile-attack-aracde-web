@@ -1428,12 +1428,6 @@ export class UI {
     ctx.fillStyle = isActive ? '#80DFFF' : status === 'READY' ? '#C0E8FF' : '#557799';
     ctx.fillText('SHIELD', cardX + 48, cardY + cardH / 2 - 14);
 
-    // Charge count — top-right
-    ctx.font = 'bold 20px monospace';
-    ctx.textAlign = 'right';
-    ctx.textBaseline = 'middle';
-    ctx.fillStyle = charges > 0 ? '#00BFFF' : '#553333';
-    ctx.fillText(`${charges}`, cardX + cardW - 10, cardY + 20);
 
     // Status bar — bottom of card
     const barX = cardX + 8;
