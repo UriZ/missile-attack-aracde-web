@@ -622,18 +622,10 @@ export class Terrain extends Entity {
    * @returns {string} CSS color string
    */
   _getMountainColor(layerIndex, baseR, baseG, baseB, baseA) {
-    if (!this._dayNight) {
-      return rgba(baseR, baseG, baseB, baseA);
-    }
-    const ambient = this._dayNight.getAmbientColor();
-    // Blend base color with ambient — mountains pick up lighting from environment
-    // Stronger ambient influence on near layer (layerIndex 2), weak on far
-    const blendFactors = [0.55, 0.45, 0.35];
-    const bf = blendFactors[layerIndex] || 0.45;
-    const r = baseR * (1 - bf) + ambient[0] * bf;
-    const g = baseG * (1 - bf) + ambient[1] * bf;
-    const b = baseB * (1 - bf) + ambient[2] * bf;
-    return rgba(r, g, b, baseA);
+    // Mountains use fixed colors — no day/night tinting.
+    // This keeps the terrain stable and prevents mountains from washing out
+    // or disappearing during sunrise/sunset ambient shifts.
+    return rgba(baseR, baseG, baseB, baseA);
   }
 
   _addMountainLayer(layerIndex, r, g, b, a, baseY, maxHeight, numPeaks, jaggedness, hasSnow) {
