@@ -113,6 +113,11 @@ export class Audio {
     this.shieldNukeHitBuffer = null;
     this.shieldWarningBuffer = null;
 
+    // Laser sounds
+    this.laserWarmUpBuffer = null;
+    this.laserFiringLoopBuffer = null;
+    this.laserHitBuffer = null;
+
     this.radioChatterBuffers = [];
     this._radioChatterLoaded = false;
     this._chatterPlaying = false;
@@ -150,6 +155,11 @@ export class Audio {
     this.shieldDeflectBuffer = this._generateShieldDeflectBuffer();
     this.shieldNukeHitBuffer = this._generateShieldNukeHitBuffer();
     this.shieldWarningBuffer = this._generateShieldWarningBuffer();
+
+    // Laser sounds
+    this.laserWarmUpBuffer      = this._generateLaserWarmUpBuffer();
+    this.laserFiringLoopBuffer  = this._generateLaserFiringLoopBuffer();
+    this.laserHitBuffer         = this._generateLaserHitBuffer();
 
     this._loadRadioChatter();
     this._loadThunder();
@@ -314,6 +324,35 @@ export class Audio {
   playShieldWarningBeeps() {
     if (!this.audioCtx) return;
     this._playBuffer(this.shieldWarningBuffer, 4.0, 1.0, 0);
+  }
+
+  /**
+   * Rising frequency sweep — laser warming up.
+   * @param {number} x — world x for stereo pan
+   */
+  playLaserWarmUp(x) {
+    if (!this.audioCtx) return;
+    this._playBuffer(this.laserWarmUpBuffer, 2.0, 1.0, panFromX(x));
+  }
+
+  /**
+   * Start sustained laser firing loop. Returns a SoundLoop handle.
+   * @param {number} x — world x for stereo pan
+   * @returns {SoundLoop|null}
+   */
+  startLaserFiringLoop(x) {
+    if (!this.audioCtx) return null;
+    const volume = Math.pow(10, 1.0 / 20); // +1 dB
+    return new SoundLoop(this.audioCtx, this.laserFiringLoopBuffer, volume, 1.0, panFromX(x));
+  }
+
+  /**
+   * Sharp crack on beam impact.
+   * @param {number} x — world x for stereo pan
+   */
+  playLaserHit(x) {
+    if (!this.audioCtx) return;
+    this._playBuffer(this.laserHitBuffer, -2.0, randf(0.9, 1.1), panFromX(x));
   }
 
   /**
@@ -969,6 +1008,116 @@ export class Audio {
       }
 
       samples[i] = Math.tanh(val * 1.2) / Math.tanh(1.2);
+    }
+
+    return this._createBuffer(samples, sampleRate);
+  }
+
+  // -- Laser warm-up: rising frequency sweep 300→4000 Hz over 1.0s ----------
+  _generateLaserWarmUpBuffer() {
+    const sampleRate = 22050;
+    const duration = 1.0;
+    const numSamples = Math.floor(sampleRate * duration);
+    const samples = new Float32Array(numSamples);
+
+    for (let i = 0; i < numSamples; i++) {
+      const t = i / sampleRate;
+      const progress = t / duration;
+
+      // Exponential frequency sweep: 300 Hz → 4000 Hz
+      const startFreq = 300;
+      const endFreq = 4000;
+      const freq = startFreq * Math.pow(endFreq / startFreq, progress);
+
+      // Envelope: gentle fade in at start, sustain, slight fade at end
+      let env;
+      if (t < 0.05) {
+        env = t / 0.05;
+      } else if (progress < 0.85) {
+        env = 0.65 + 0.35 * progress; // builds in intensity
+      } else {
+        env = 1.0 * (1 - (progress - 0.85) / 0.15 * 0.3);
+      }
+
+      // Main tone — sawtooth-ish via harmonics for electrical feel
+      const phase = TAU * freq * t;
+      const tone = Math.sin(phase) * 0.5
+                 + Math.sin(phase * 2) * 0.2
+                 + Math.sin(phase * 3) * 0.1;
+
+      // Electrical buzz — high-frequency noise component that intensifies
+      const buzz = randf(-0.5, 0.5) * progress * 0.25;
+
+      // Phase-coherent phase for a "capacitor whine"
+      const whine = Math.sin(TAU * 1200 * t * (1 + progress)) * 0.15 * progress;
+
+      let val = (tone + buzz + whine) * env * 0.5;
+      val = Math.tanh(val * 1.5) / Math.tanh(1.5);
+
+      samples[i] = val;
+    }
+
+    applyLoopCrossfade(samples, LOOP_FADE_SAMPLES);
+    return this._createBuffer(samples, sampleRate);
+  }
+
+  // -- Laser firing loop: sustained electrical buzz --------------------------
+  _generateLaserFiringLoopBuffer() {
+    // 0.25s loop — smooth crossfade at boundaries for seamless looping
+    const sampleRate = 22050;
+    const duration = 0.25;
+    const numSamples = Math.floor(sampleRate * duration);
+    const samples = new Float32Array(numSamples);
+
+    for (let i = 0; i < numSamples; i++) {
+      const t = i / sampleRate;
+
+      // Main carrier: 180 Hz electrical hum
+      const carrier = Math.sin(TAU * 180 * t) * 0.4;
+
+      // Harmonic overtones for buzzy character
+      const h2 = Math.sin(TAU * 360 * t) * 0.2;
+      const h3 = Math.sin(TAU * 540 * t) * 0.1;
+      const h5 = Math.sin(TAU * 900 * t) * 0.06;
+
+      // High frequency crackling
+      const crackle = randf(-1, 1) > 0.6 ? randf(-0.15, 0.15) : 0;
+
+      // Slight amplitude modulation at 60 Hz (power-line hum character)
+      const am = 0.85 + 0.15 * Math.sin(TAU * 60 * t);
+
+      let val = (carrier + h2 + h3 + h5 + crackle) * am;
+      val = Math.tanh(val * 2.0) / Math.tanh(2.0);
+
+      samples[i] = val * 0.6;
+    }
+
+    applyLoopCrossfade(samples, LOOP_FADE_SAMPLES);
+    return this._createBuffer(samples, sampleRate);
+  }
+
+  // -- Laser hit: sharp electrical crack on impact ---------------------------
+  _generateLaserHitBuffer() {
+    const sampleRate = 22050;
+    const duration = 0.08;
+    const numSamples = Math.floor(sampleRate * duration);
+    const samples = new Float32Array(numSamples);
+
+    for (let i = 0; i < numSamples; i++) {
+      const t = i / sampleRate;
+      const progress = t / duration;
+
+      // Very sharp attack, instant decay
+      const env = Math.exp(-progress * 25);
+
+      // High-frequency crack — noise burst with tone at ~3000 Hz
+      const tone = Math.sin(TAU * 3000 * t) * 0.4;
+      const noise = randf(-1.0, 1.0) * 0.6;
+
+      let val = (tone + noise) * env;
+      val = Math.tanh(val * 3.0) / Math.tanh(3.0);
+
+      samples[i] = val;
     }
 
     return this._createBuffer(samples, sampleRate);

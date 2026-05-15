@@ -11,6 +11,7 @@ import { SAMLauncher } from './entities/sam-launcher.js';
 import { HeatSeekerLauncher } from './entities/heat-seeking-launcher.js';
 import { TruckLauncher } from './entities/truck-launcher.js';
 import { VulkanCannon } from './entities/vulkan-cannon.js';
+import { LaserLauncher } from './entities/laser-launcher.js';
 import { DronePad } from './entities/drone-pad.js';
 import { HunterDrone } from './entities/hunter-drone.js';
 import { Missile } from './entities/missile.js';
@@ -37,6 +38,7 @@ const LAUNCHER_POSITIONS = [
   { x: 1400, y: 1220, Class: TruckLauncher },
   { x: 1900, y: 1220, Class: VulkanCannon },
   { x: 2200, y: 1220, Class: DronePad },
+  { x: 2450, y: 1220, Class: LaserLauncher },
 ];
 
 const CROSSHAIR_RADIUS = 90;
@@ -87,6 +89,10 @@ export class Game {
     // Vulkan spool state
     this._vulkanSpoolLoop = null;
     this._vulkanWasFiring = false;
+
+    // Laser state
+    this._laserFiringLoop = null;
+    this._laserMouseWasDown = false;
 
     // Mega Shield state
     this.shieldCharges = 2;
@@ -155,6 +161,8 @@ export class Game {
     this.lockedTarget = null;
     this._vulkanSpoolLoop = null;
     this._vulkanWasFiring = false;
+    this._laserFiringLoop = null;
+    this._laserMouseWasDown = false;
 
     // Reset shield
     this.shieldCharges = 2;
@@ -188,6 +196,41 @@ export class Game {
     const vulkan = this.launchers[3];
     if (vulkan && vulkan.type === 'vulkan') {
       vulkan.onFireBullet = (cannon) => this._onVulkanFire(cannon);
+    }
+
+    // Wire laser launcher
+    const laser = this.launchers.find(l => l.type === 'laser');
+    if (laser) {
+      // Enemy access for beam collision
+      laser.getEnemies = () => this.entities.getGroup('enemy_missiles');
+      // Game ref for scoring
+      laser.game = this;
+      // Audio callbacks
+      laser.onStartWarmUp = () => this.audio.playLaserWarmUp(laser.x);
+      laser.onCancelWarmUp = () => {};
+      laser.onStartFiring  = () => {
+        this._laserFiringLoop = this.audio.startLaserFiringLoop(laser.x);
+      };
+      laser.onStopFiring   = () => {
+        if (this._laserFiringLoop) {
+          this.audio.stopLoop(this._laserFiringLoop);
+          this._laserFiringLoop = null;
+        }
+      };
+      laser.onBeamHit      = (x, y) => this.audio.playLaserHit(x);
+      // Kill callback — handle scoring and explosion
+      laser.onEnemyKilled  = (enemy, typeName) => {
+        this.onEnemyDestroyed(typeName.toLowerCase());
+        this.shakeScreen(8);
+      };
+      laser.onSpawnExplosion = (x, y, isMega) => {
+        this.entities.add(new Explosion(x, y, isMega));
+        this.audio.playExplosion(x, isMega);
+        if (this.terrain) this.terrain.damage(x, y, isMega ? 100 : 50, isMega ? 30 : 18);
+        const craterY = this.terrain ? this.terrain.getHeightAt(x) : y;
+        this.entities.add(new Crater(x, craterY, isMega ? 2 : 1));
+        this.shakeScreen(isMega ? 20 : 8);
+      };
     }
 
     // Select SAM by default
@@ -267,8 +310,8 @@ export class Game {
       () => this.entities.getGroup('enemy_missiles').length);
     this.waveNumber = this.waves.getCurrentWave();
 
-    // Keyboard launcher selection (1-5)
-    for (let i = 0; i < 5; i++) {
+    // Keyboard launcher selection (1-6)
+    for (let i = 0; i < 6; i++) {
       if (this.input.wasKeyPressed(String(i + 1))) {
         this._selectLauncher(i);
       }
@@ -449,6 +492,12 @@ export class Game {
       // Game world (with shake) — terrain, entities
       this.entities.draw(ctx);
 
+      // Laser beam — drawn AFTER entities so it appears on top of everything
+      const laserLauncher = this.launchers.find(l => l.type === 'laser' && l.alive);
+      if (laserLauncher) {
+        laserLauncher.drawBeam(ctx);
+      }
+
       // Shield edge glow (drawn AFTER entities so it wraps around the scene)
       if (this.activeShield && this.activeShield.alive) {
         this.activeShield.drawGlow(ctx);
@@ -491,6 +540,12 @@ export class Game {
       if (this.selectedLauncher.type === 'vulkan') {
         this.selectedLauncher.stopFiring();
         this._stopVulkanSpool();
+      } else if (this.selectedLauncher.type === 'laser') {
+        this.selectedLauncher.stopFiring();
+        if (this._laserFiringLoop) {
+          this.audio.stopLoop(this._laserFiringLoop);
+          this._laserFiringLoop = null;
+        }
       }
     }
 
@@ -502,6 +557,13 @@ export class Game {
   _autoSelectLauncher() {
     if (this.selectedLauncher && this.selectedLauncher.type === 'vulkan') {
       this._stopVulkanSpool();
+    }
+    if (this.selectedLauncher && this.selectedLauncher.type === 'laser') {
+      if (this._laserFiringLoop) {
+        this.audio.stopLoop(this._laserFiringLoop);
+        this._laserFiringLoop = null;
+      }
+      this._laserMouseWasDown = false;
     }
     this.selectedLauncher = null;
     this.lockedTarget = null;
@@ -532,6 +594,18 @@ export class Game {
           sel.stopFiring();
           this._stopVulkanSpool();
           this._vulkanWasFiring = false;
+        }
+      }
+    } else if (sel.type === 'laser') {
+      if (this.input.mouseDown) {
+        if (!this._laserMouseWasDown) {
+          sel.startWarmUp();
+          this._laserMouseWasDown = true;
+        }
+      } else {
+        if (this._laserMouseWasDown) {
+          sel.stopFiring();
+          this._laserMouseWasDown = false;
         }
       }
     } else if (sel.type === 'drone_pad') {
@@ -793,6 +867,10 @@ export class Game {
     if (!this.launchers.some(l => l.alive) && this.state === 'playing') {
       this.state = 'gameover';
       this._stopVulkanSpool();
+      if (this._laserFiringLoop) {
+        this.audio.stopLoop(this._laserFiringLoop);
+        this._laserFiringLoop = null;
+      }
     }
   }
 
