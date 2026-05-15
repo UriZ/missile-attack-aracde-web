@@ -286,6 +286,8 @@ export class Terrain extends Entity {
       this._scatterDesertVegetation();
     } else if (biomeId === 'snow' || biomeId === 'snowy_mountains') {
       this._scatterSnowVegetation();
+    } else if (biomeId === 'pine_forest') {
+      this._scatterPineForest();
     } else {
       this._scatterTrees();
     }
@@ -335,6 +337,12 @@ export class Terrain extends Entity {
           else if (roll < 0.45) this._addSoldierGroup(x);
           else if (roll < 0.75) this._addSnowPineTree(x);
           else this._addRockFormation(x);
+        } else if (biomeId === 'pine_forest') {
+          // Pine forest: mostly pines, few buildings, some rocks
+          if (roll < 0.10) this._addCivilianBuilding(x);
+          else if (roll < 0.15) this._addSoldierGroup(x);
+          else if (roll < 0.85) this._addPineTree(x);
+          else this._addBushCluster(x);
         } else {
           // Default mixed biomes
           if (roll < 0.20) this._addCivilianBuilding(x);
@@ -689,6 +697,29 @@ export class Terrain extends Entity {
       const roll = Math.random();
       if (roll < 0.40) this._addPineTree(tx, terrainY);
       else if (roll < 0.75) this._addDeciduousTree(tx, terrainY);
+      else this._addBushCluster(tx, terrainY);
+    }
+  }
+
+  _scatterPineForest() {
+    const launcherXs = [400, 900, 1400, 1900];
+    const treeClear = 70;
+    // Dense pine forest — more trees than normal
+    const numTrees = randi(35, 50);
+
+    for (let ti = 0; ti < numTrees; ti++) {
+      const tx = randf(30, TERRAIN_WIDTH - 30);
+      let nearLauncher = false;
+      for (const lx of launcherXs) {
+        if (Math.abs(tx - lx) < treeClear) { nearLauncher = true; break; }
+      }
+      if (nearLauncher) continue;
+
+      const sampleI = clamp(Math.floor(tx / TERRAIN_RESOLUTION), 0, this.heights.length - 1);
+      const terrainY = this.heights[sampleI];
+
+      const roll = Math.random();
+      if (roll < 0.80) this._addPineTree(tx, terrainY);
       else this._addBushCluster(tx, terrainY);
     }
   }

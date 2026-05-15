@@ -77,6 +77,18 @@ const BIOMES = {
     cloudDarkness: 0.40,
     mountains:    true,
   },
+  pine_forest: {
+    id: 'pine_forest',
+    groundTint:   [0.55, 0.65, 0.40],
+    grassTint:    [0.40, 0.70, 0.30],
+    skyTint:      [0.70, 0.80, 0.88],
+    hazeTint:     [0.65, 0.78, 0.72],
+    filter:       'saturate(1.3) brightness(0.92)',
+    heightAmp:    0.9,
+    heightFreq:   1.2,
+    cloudDarkness: 0.10,
+    mountains:    true,
+  },
   snowy_mountains: {
     id: 'snowy_mountains',
     groundTint:   [0.92, 0.94, 0.98],
