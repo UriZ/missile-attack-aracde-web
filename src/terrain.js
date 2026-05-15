@@ -1554,6 +1554,28 @@ export class Terrain extends Entity {
       const rx = w * 0.5;
       _fillRect(ctx, rx - 3, -h - roofH - 2, 6, 3, rgba(...darken(...roofColor, 0.25)));
 
+      // Snow cap on roof (snow biome only)
+      const biomeId_bld = terrain._biomeSystem ? (terrain._biomeSystem._def ? terrain._biomeSystem._def.id : null) : null;
+      if (biomeId_bld === 'snow') {
+        // Snow layer on both sides of pitched roof
+        const snowDepth = 4;
+        ctx.fillStyle = 'rgba(218,226,240,0.82)';
+        ctx.beginPath();
+        ctx.moveTo(-overhang, -h);
+        ctx.lineTo(w * 0.5, -h - roofH);
+        ctx.lineTo(w * 0.5 - snowDepth * 0.8, -h - roofH + snowDepth);
+        ctx.lineTo(-overhang + snowDepth * 1.5, -h + snowDepth * 0.5);
+        ctx.closePath();
+        ctx.fill();
+        ctx.beginPath();
+        ctx.moveTo(w * 0.5, -h - roofH);
+        ctx.lineTo(w + overhang, -h);
+        ctx.lineTo(w + overhang - snowDepth * 1.5, -h + snowDepth * 0.5);
+        ctx.lineTo(w * 0.5 + snowDepth * 0.8, -h - roofH + snowDepth);
+        ctx.closePath();
+        ctx.fill();
+      }
+
       // Chimney
       if (hasChimney) {
         _fillRect(ctx, chimX, -h - 4 - chimH, chimW, chimH, rgba(0.48, 0.30, 0.25));
