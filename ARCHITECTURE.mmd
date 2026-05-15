@@ -1,0 +1,92 @@
+flowchart TB
+    subgraph Entry ["Entry Point"]
+        HTML["index.html<br/>Canvas + ES Module boot"]
+    end
+
+    subgraph Core ["Core Systems"]
+        direction TB
+        Game["game.js<br/>State Machine + Game Loop"]
+        Loop["loop.js<br/>requestAnimationFrame"]
+        Renderer["renderer.js<br/>Canvas 2D Pipeline"]
+        Input["input.js<br/>Mouse + Keyboard"]
+        Audio["audio.js<br/>Web Audio Synth + MP3"]
+        Collision["collision.js<br/>Hit Detection"]
+    end
+
+    subgraph World ["World Systems"]
+        direction TB
+        Terrain["terrain.js<br/>Deformable Heightmap"]
+        Wave["wave.js<br/>Enemy Spawning"]
+        Biome["biome.js<br/>Weather + Particles"]
+        DayNight["day-night.js<br/>Lighting Cycle"]
+        Vision["vision.js<br/>Vision Modes"]
+        UI["ui.js<br/>HUD + Menus"]
+    end
+
+    subgraph Entities ["Entity System"]
+        direction TB
+        EM["entity-manager.js<br/>Add/Remove/Groups"]
+        Entity["entity.js<br/>Base Class"]
+    end
+
+    subgraph Player ["Player Weapons"]
+        direction TB
+        Launcher["launcher.js<br/>Base Turret"]
+        SAM["sam-launcher.js"]
+        Truck["truck-launcher.js"]
+        HeatLauncher["heat-seeking-launcher.js"]
+        Vulkan["vulkan-cannon.js"]
+        Missile["missile.js"]
+        HeatMissile["heat-seeking-missile.js"]
+        VulkanBullet["vulkan-bullet.js"]
+        Shield["mega-shield.js"]
+    end
+
+    subgraph Enemies ["Enemy Units"]
+        direction TB
+        EnemyMissile["enemy-missile.js"]
+        SuperMissile["super-missile.js"]
+        Nuke["nuke.js"]
+        Drone["drone.js"]
+        SuicideDrone["suicide-drone.js"]
+        HunterDrone["hunter-drone.js"]
+        Transport["transport-plane.js"]
+        Paratrooper["paratrooper.js"]
+    end
+
+    subgraph Effects ["Visual Effects"]
+        direction TB
+        Explosion["explosion.js"]
+        Mushroom["mushroom-cloud.js"]
+        Crater["crater.js"]
+        DroneKill["drone-kill-explosion.js"]
+        Fragment["missile-fragment.js"]
+    end
+
+    HTML --> Game
+    Game --> Loop
+    Loop -->|"update dt"| Game
+    Loop -->|"render"| Game
+    Game --> Renderer
+    Game --> Input
+    Game --> Audio
+    Game --> Collision
+    Game --> Wave
+    Game --> UI
+    Game --> Biome
+    Game --> DayNight
+    Game --> Vision
+    Game --> EM
+
+    EM --> Entity
+    Launcher --> Entity
+    SAM --> Launcher
+    Truck --> Launcher
+    HeatLauncher --> Launcher
+    Vulkan --> Launcher
+
+    Wave -->|spawns| Enemies
+    Collision -->|checks| Player
+    Collision -->|checks| Enemies
+    Collision -->|damages| Terrain
+    Explosion --> Crater
