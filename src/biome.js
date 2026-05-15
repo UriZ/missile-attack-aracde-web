@@ -199,11 +199,17 @@ export class BiomeSystem {
     this._shimmerBands = _makeShimmerBands();
 
     // Lightning state machine
-    this._lightningState = 'idle';   // 'idle' | 'flash' | 'afterglow'
+    this._lightningState = 'idle';   // 'idle' | 'flash' | 'afterglow' | 'thunder_delay'
     this._lightningTimer = 0;
     this._lightningInterval = randf(8, 15);
-    this._lightningBolt = null;      // Array of {x, y} points when active
+    this._lightningBolt = null;      // Array of {x, y, branches: [{pts}]} when active
     this._lightningFlashAlpha = 0;
+    this._thunderDelay = 0;          // seconds after flash before thunder plays
+    this._thunderPending = false;
+
+    // Wind state for rain
+    this._windX = randf(-5, -1.5);   // negative = leftward wind
+    this._windChangeTimer = 0;
 
     // Elapsed time for animations
     this._time = 0;
@@ -263,7 +269,13 @@ export class BiomeSystem {
     }
 
     if (id === 'stormy') {
-      _updateRain(this._rainParticles, dt);
+      // Slowly vary wind direction/strength
+      this._windChangeTimer += dt;
+      if (this._windChangeTimer > randf(8, 15)) {
+        this._windX = randf(-6, -1);
+        this._windChangeTimer = 0;
+      }
+      _updateRain(this._rainParticles, dt, this._windX);
       this._updateLightning(dt, audio);
     }
 
@@ -336,16 +348,30 @@ export class BiomeSystem {
   _updateLightning(dt, audio = null) {
     this._lightningTimer += dt;
 
+    // Thunder delay — plays thunder sound after calculated delay from flash
+    if (this._thunderPending) {
+      this._thunderDelay -= dt;
+      if (this._thunderDelay <= 0) {
+        this._thunderPending = false;
+        if (audio && typeof audio.playThunder === 'function') {
+          audio.playThunder();
+        }
+      }
+    }
+
     if (this._lightningState === 'idle') {
       if (this._lightningTimer >= this._lightningInterval) {
         this._lightningState = 'flash';
         this._lightningTimer = 0;
         this._lightningBolt = _generateLightningBolt();
         this._lightningFlashAlpha = 1.0;
-        // Play thunder sound on lightning flash
-        if (audio && typeof audio.playThunder === 'function') {
-          audio.playThunder();
-        }
+
+        // Calculate thunder delay: approx 1s per 340m of distance
+        // bolt is 200-2360px range; use bolt x distance from center
+        const boltX = this._lightningBolt[0].x;
+        const distFrac = Math.abs(boltX - LOGICAL_W * 0.5) / (LOGICAL_W * 0.5);
+        this._thunderDelay  = randf(0.4, 1.2) + distFrac * randf(0.8, 2.0);
+        this._thunderPending = true;
       }
     } else if (this._lightningState === 'flash') {
       const FLASH_DUR = 0.12;
@@ -384,11 +410,14 @@ export class BiomeSystem {
     ctx.save();
     ctx.strokeStyle = 'rgba(160,180,230,1)';
     ctx.lineWidth = 1.5;
+    // Wind angle: horizontal drift per vertical unit
+    const windAngle = this._windX * 0.012;
     for (const d of this._rainParticles) {
       ctx.globalAlpha = d.alpha;
       ctx.beginPath();
       ctx.moveTo(d.x, d.y);
-      ctx.lineTo(d.x - 3, d.y + d.len);
+      // Apply wind angle to the streak direction
+      ctx.lineTo(d.x + windAngle * d.len * d.speed * 0.001, d.y + d.len);
       ctx.stroke();
     }
     ctx.globalAlpha = 1;
@@ -407,25 +436,38 @@ export class BiomeSystem {
       ctx.fillRect(0, 0, LOGICAL_W, LOGICAL_H);
     }
 
-    // Lightning bolt
-    const bolt = this._lightningBolt;
-    if (bolt.length > 1) {
-      // Glow pass
-      ctx.strokeStyle = 'rgba(180,200,255,0.5)';
-      ctx.lineWidth = 8;
-      ctx.lineJoin = 'round';
-      ctx.beginPath();
-      ctx.moveTo(bolt[0].x, bolt[0].y);
-      for (let i = 1; i < bolt.length; i++) ctx.lineTo(bolt[i].x, bolt[i].y);
-      ctx.stroke();
+    const bolt     = this._lightningBolt;
+    const branches = bolt._branches || [];
 
-      // Core
-      ctx.strokeStyle = 'rgba(220,230,255,0.95)';
-      ctx.lineWidth = 2.5;
+    // Helper: draw a bolt path
+    const drawBoltPath = (pts, glowWidth, coreWidth, glowAlpha, coreAlpha) => {
+      if (pts.length < 2) return;
+      // Glow pass
+      ctx.strokeStyle = `rgba(180,200,255,${glowAlpha})`;
+      ctx.lineWidth   = glowWidth;
+      ctx.lineJoin    = 'round';
+      ctx.lineCap     = 'round';
       ctx.beginPath();
-      ctx.moveTo(bolt[0].x, bolt[0].y);
-      for (let i = 1; i < bolt.length; i++) ctx.lineTo(bolt[i].x, bolt[i].y);
+      ctx.moveTo(pts[0].x, pts[0].y);
+      for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
       ctx.stroke();
+      // Core
+      ctx.strokeStyle = `rgba(220,230,255,${coreAlpha})`;
+      ctx.lineWidth   = coreWidth;
+      ctx.beginPath();
+      ctx.moveTo(pts[0].x, pts[0].y);
+      for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+      ctx.stroke();
+    };
+
+    if (bolt.length > 1) {
+      // Main bolt — thick and bright
+      drawBoltPath(bolt, 10, 3.0, 0.55, 0.95);
+
+      // Branches — thinner, more transparent
+      for (const branch of branches) {
+        drawBoltPath(branch, 5, 1.5, 0.30, 0.70);
+      }
     }
 
     ctx.restore();
@@ -578,13 +620,16 @@ function _makeRainParticles() {
   return particles;
 }
 
-function _updateRain(particles, dt) {
+function _updateRain(particles, dt, windX = -3) {
   for (const d of particles) {
     d.y += d.speed * dt;
+    d.x += windX * d.speed * dt * 0.012; // wind drift proportional to fall speed
     if (d.y > LOGICAL_H + d.len) {
       d.y = -d.len;
       d.x = Math.random() * LOGICAL_W;
     }
+    if (d.x < -d.len * 2) d.x += LOGICAL_W + d.len * 4;
+    if (d.x > LOGICAL_W + d.len * 2) d.x -= LOGICAL_W + d.len * 4;
   }
 }
 
@@ -607,22 +652,48 @@ function _updateShimmer(bands, dt) {
   }
 }
 
+/**
+ * Generate a branching lightning bolt.
+ * Returns { main: [{x,y}], branches: [[{x,y}]] }
+ */
 function _generateLightningBolt() {
-  // Bolt starts at random x in top area, ends near terrain
   const startX = randf(200, 2360);
   const startY = randf(50, 200);
-  const endX   = startX + randf(-200, 200);
+  const endX   = startX + randf(-300, 300);
   const endY   = randf(900, 1200);
 
-  const numSegments = randi(8, 14);
-  const pts = [{ x: startX, y: startY }];
+  const numSegments = randi(10, 16);
+  const main = [{ x: startX, y: startY }];
 
   for (let i = 1; i <= numSegments; i++) {
-    const t = i / numSegments;
-    const bx = startX + (endX - startX) * t + randf(-60, 60);
+    const t  = i / numSegments;
+    const bx = startX + (endX - startX) * t + randf(-80, 80);
     const by = startY + (endY - startY) * t;
-    pts.push({ x: bx, y: by });
+    main.push({ x: bx, y: by });
   }
 
-  return pts;
+  // Generate 1-3 fork branches from random points along the main bolt
+  const branches = [];
+  const numBranches = randi(1, 3);
+  for (let bi = 0; bi < numBranches; bi++) {
+    // Pick a branch point somewhere in the upper-mid section
+    const branchFromIdx = randi(Math.floor(numSegments * 0.25), Math.floor(numSegments * 0.65));
+    const branchStart   = main[branchFromIdx];
+    const branchLen     = randi(4, 8);
+    const branchDir     = Math.random() < 0.5 ? 1 : -1;
+    const branch        = [{ x: branchStart.x, y: branchStart.y }];
+
+    for (let si = 1; si <= branchLen; si++) {
+      const t      = si / branchLen;
+      const prevPt = branch[branch.length - 1];
+      const bx     = prevPt.x + branchDir * randf(15, 35) + randf(-20, 20);
+      const by     = branchStart.y + (endY - branchStart.y) * t * 0.6;
+      branch.push({ x: bx, y: by });
+    }
+    branches.push(branch);
+  }
+
+  // Attach branches to the main bolt object for the draw function
+  main._branches = branches;
+  return main;
 }
