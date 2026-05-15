@@ -613,9 +613,7 @@ export class Terrain extends Entity {
     this._addMountainLayer(1, 0.110, 0.141, 0.188, 0.87, -460, 310, 7, 0.75, false);
     // Layer 3: nearby hills — #222C20 (layerIndex 2) — jagged foreground
     this._addMountainLayer(2, 0.133, 0.173, 0.125, 0.82, -260, 195, 10, 1.0, false);
-    // Snow caps on far and mid mountains
-    this._addSnowCaps(-680, 420, 5);
-    this._addSnowCapsSecond(-680, 420, 5);
+    // Snow caps removed per user request
   }
 
   /**
@@ -674,83 +672,6 @@ export class Terrain extends Entity {
     this.decorations.push(d);
   }
 
-  _addSnowCaps(baseY, maxHeight, numPeaks) {
-    const phase  = Math.random() * TAU;
-    const phase2 = Math.random() * TAU;
-    const phase3 = Math.random() * TAU;
-    const steps  = numPeaks * 12;
-    const snowColor = rgba(0.85, 0.88, 0.92, 0.72);
-
-    // Collect snow cap triangles — snow starts at 58% of max height
-    const caps = [];
-    for (let i = 0; i < steps; i++) {
-      const t = i / steps;
-      const x = t * TERRAIN_WIDTH;
-      let h = 0;
-      h += Math.sin(t * Math.PI * numPeaks + phase) * maxHeight * 0.50;
-      h += Math.sin(t * Math.PI * numPeaks * 2.3 + phase2) * maxHeight * 0.28 * 0.55;
-      h += Math.sin(t * Math.PI * numPeaks * 4.7 + phase3) * maxHeight * 0.12 * 0.55;
-
-      const snowThreshold = maxHeight * 0.58;
-      if (h > snowThreshold) {
-        const snowH = (h - snowThreshold) * 0.45;
-        const peakY = baseY - h;
-        const sw = randf(22, 48);
-        caps.push({ x, peakY, snowH, sw });
-      }
-    }
-
-    const drawFn = (ctx) => {
-      ctx.fillStyle = snowColor;
-      for (const c of caps) {
-        ctx.beginPath();
-        ctx.moveTo(c.x - c.sw * 0.5, c.peakY + c.snowH * 0.55);
-        ctx.lineTo(c.x, c.peakY - c.snowH);
-        ctx.lineTo(c.x + c.sw * 0.5, c.peakY + c.snowH * 0.55);
-        ctx.closePath();
-        ctx.fill();
-      }
-    };
-    this.decorations.push({ x: 0, width: TERRAIN_WIDTH, drawFn, _isMountain: true });
-  }
-
-  /** Second snow cap layer — slightly offset for depth. */
-  _addSnowCapsSecond(baseY, maxHeight, numPeaks) {
-    const phase  = Math.random() * TAU;
-    const phase2 = Math.random() * TAU;
-    const steps  = numPeaks * 12;
-    const snowColor = rgba(0.92, 0.94, 0.97, 0.48);
-
-    const caps = [];
-    for (let i = 0; i < steps; i++) {
-      const t = i / steps;
-      const x = t * TERRAIN_WIDTH;
-      let h = 0;
-      h += Math.sin(t * Math.PI * numPeaks + phase) * maxHeight * 0.50;
-      h += Math.sin(t * Math.PI * numPeaks * 2.3 + phase2) * maxHeight * 0.28 * 0.55;
-
-      const snowThreshold = maxHeight * 0.72;
-      if (h > snowThreshold) {
-        const snowH = (h - snowThreshold) * 0.32;
-        const peakY = baseY - h;
-        const sw = randf(10, 24);
-        caps.push({ x, peakY, snowH, sw });
-      }
-    }
-
-    const drawFn = (ctx) => {
-      ctx.fillStyle = snowColor;
-      for (const c of caps) {
-        ctx.beginPath();
-        ctx.moveTo(c.x - c.sw * 0.3, c.peakY + c.snowH * 0.4);
-        ctx.lineTo(c.x, c.peakY - c.snowH);
-        ctx.lineTo(c.x + c.sw * 0.3, c.peakY + c.snowH * 0.4);
-        ctx.closePath();
-        ctx.fill();
-      }
-    };
-    this.decorations.push({ x: 0, width: TERRAIN_WIDTH, drawFn, _isMountain: true });
-  }
 
   // ── Scattered trees ────────────────────────────────────────
 
