@@ -11,7 +11,7 @@ import { TAU } from '../utils.js';
 
 const MAX_ACTIVE_DRONES = 2;
 const MAX_STOCK         = 5;
-const DEPLOY_COOLDOWN   = 3.0; // seconds
+const DEPLOY_COOLDOWN   = 0; // no cooldown
 
 // ── Visual geometry (local coords, all y is negative = upward) ───────────────
 

@@ -95,7 +95,7 @@ export class Game {
     this._laserMouseWasDown = false;
 
     // Mega Shield state
-    this.shieldCharges = 2;
+    this.shieldCharges = 99;
     this.shieldCooldown = 0;
     /** @type {MegaShield|null} */
     this.activeShield = null;
@@ -135,9 +135,9 @@ export class Game {
       this.ui.showWaveBanner(`WAVE ${wave} CLEAR`, rgba(0.2, 0.9, 0.3));
       // Begin gradual terrain healing during the inter-wave break.
       if (this.terrain) this.terrain.recovering = true;
-      // Every 5 waves grant +1 shield charge (max 3)
-      if (wave % 5 === 0 && this.shieldCharges < 3) {
-        this.shieldCharges = Math.min(3, this.shieldCharges + 1);
+      // Every 5 waves grant +1 shield charge
+      if (wave % 5 === 0) {
+        this.shieldCharges++;
       }
     };
 
@@ -165,7 +165,7 @@ export class Game {
     this._laserMouseWasDown = false;
 
     // Reset shield
-    this.shieldCharges = 2;
+    this.shieldCharges = 99;
     this.shieldCooldown = 0;
     this.activeShield = null;
 

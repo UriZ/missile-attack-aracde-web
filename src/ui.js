@@ -1428,33 +1428,12 @@ export class UI {
     ctx.fillStyle = isActive ? '#80DFFF' : status === 'READY' ? '#C0E8FF' : '#557799';
     ctx.fillText('SHIELD', cardX + 48, cardY + cardH / 2 - 14);
 
-    // 3 charge dots — top-right area
-    const dotR = 7;
-    const dotStartX = cardX + cardW - 14;
-    const dotY = cardY + 18;
-    for (let d = 0; d < 3; d++) {
-      const filled = d < charges;
-      const dotX = dotStartX - d * (dotR * 2 + 4);
-      ctx.beginPath();
-      ctx.arc(dotX, dotY, dotR, 0, Math.PI * 2);
-      if (filled) {
-        ctx.fillStyle = '#00BFFF';
-        if (isActive && d === charges - 1) {
-          // Pulsing glow on the most recently used charge while active
-        } else {
-          ctx.shadowColor = '#00BFFF';
-          ctx.shadowBlur = 8;
-        }
-      } else {
-        ctx.fillStyle = 'rgba(0,30,50,0.85)';
-        ctx.shadowBlur = 0;
-      }
-      ctx.fill();
-      ctx.shadowBlur = 0;
-      ctx.strokeStyle = filled ? 'rgba(0,180,255,0.7)' : 'rgba(0,60,90,0.5)';
-      ctx.lineWidth = 1;
-      ctx.stroke();
-    }
+    // Charge count — top-right
+    ctx.font = 'bold 20px monospace';
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = charges > 0 ? '#00BFFF' : '#553333';
+    ctx.fillText(`${charges}`, cardX + cardW - 10, cardY + 20);
 
     // Status bar — bottom of card
     const barX = cardX + 8;
