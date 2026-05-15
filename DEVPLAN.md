@@ -119,6 +119,7 @@ Legend: ~~Strikethrough~~ = Done | **Bold** = In Progress/QA | Normal = Planned
     - a vulkan with 4 guns (mega vulkan)
     - a vulkan with extra ammo/more time to heat up
     - similar to the laser beam — a sound wave that kills everything in a wide range
+    - auto aim for the vulkan
 
 
 ---
