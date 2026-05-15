@@ -29,6 +29,7 @@ const LAUNCHER_SLOTS = [
   { key: '3', type: 'truck',      label: 'TRUCK'   },
   { key: '4', type: 'vulkan',     label: 'VULKAN'  },
   { key: '5', type: 'drone_pad',  label: 'HUNTER'  },
+  { key: '6', type: 'laser',      label: 'LASER'   },
 ];
 
 // Nuke warning duration
@@ -51,6 +52,13 @@ const HEAT_BAR_X      = LAUNCHER_PANEL_X + VULKAN_SLOT_INDEX * (LAUNCHER_CARD_W 
 const HEAT_BAR_BOTTOM = LAUNCHER_PANEL_Y - LAUNCHER_CARD_H - 20;
 const HEAT_BAR_W      = LAUNCHER_CARD_W;
 const HEAT_BAR_H      = 22;
+
+// Energy bar — positioned above the Laser card (slot index 5)
+const LASER_SLOT_INDEX  = 5;
+const ENERGY_BAR_X      = LAUNCHER_PANEL_X + LASER_SLOT_INDEX * (LAUNCHER_CARD_W + LAUNCHER_CARD_GAP);
+const ENERGY_BAR_BOTTOM = LAUNCHER_PANEL_Y - LAUNCHER_CARD_H - 20;
+const ENERGY_BAR_W      = LAUNCHER_CARD_W;
+const ENERGY_BAR_H      = 22;
 
 // ── Color helpers ─────────────────────────────────────────────────────────
 
@@ -162,6 +170,11 @@ export class UI {
     const sel = game.selectedLauncher;
     if (sel && sel.type === 'vulkan' && sel.alive && sel.heat > 0.01) {
       this._drawHeatBar(ctx, sel.heat, sel.overheated);
+    }
+
+    // ── Energy bar (laser launcher — always visible when laser selected) ──
+    if (sel && sel.type === 'laser' && sel.alive) {
+      this._drawEnergyBar(ctx, sel.energy, sel.laserState);
     }
 
     // ── Shield HUD card (bottom-right) ──
@@ -502,6 +515,13 @@ export class UI {
         const cd = sel.deployCooldown > 0 ? ` (cooldown ${sel.deployCooldown.toFixed(1)}s)` : '';
         return `HUNTER — Click to deploy drone   stock:[${stock}]${cd}`;
       }
+      case 'laser': {
+        const state = sel.laserState || 'idle';
+        const energyPct = Math.round((sel.energy || 0) * 100);
+        if (state === 'warming') return `LASER — Charging... hold to fire`;
+        if (state === 'firing')  return `LASER — FIRING   energy:${energyPct}%`;
+        return `LASER — Hold click to fire directed energy beam`;
+      }
       default:
         return '';
     }
@@ -743,6 +763,108 @@ export class UI {
   }
 
   /**
+   * Draw the energy bar for the Laser Launcher.
+   * Drains from full (left) when firing, recharges when idle.
+   * @param {CanvasRenderingContext2D} ctx
+   * @param {number} energy — 0..1
+   * @param {string} laserState — 'idle' | 'warming' | 'firing'
+   */
+  _drawEnergyBar(ctx, energy, laserState) {
+    const x = ENERGY_BAR_X;
+    const y = ENERGY_BAR_BOTTOM - ENERGY_BAR_H;
+    const w = ENERGY_BAR_W;
+    const h = 28;
+
+    ctx.save();
+
+    // Label
+    ctx.font = 'bold 22px monospace';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'bottom';
+    ctx.fillStyle = rgba(0.6, 0.5, 0.85, 0.9);
+    ctx.fillText('ENERGY', x, y - 4);
+
+    // Track — dark background, rounded r=5
+    ctx.fillStyle = 'rgba(6,4,14,0.85)';
+    _roundRect(ctx, x, y, w, h, 5);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(60,40,100,0.6)';
+    ctx.lineWidth = 1.5;
+    _roundRect(ctx, x, y, w, h, 5);
+    ctx.stroke();
+
+    // Fill — violet-to-cyan gradient, drains when firing
+    const fillW = clamp(energy, 0, 1) * (w - 4);
+    if (fillW > 0) {
+      if (laserState === 'firing' && energy < 0.2) {
+        // Pulsing red when nearly depleted
+        const pulse = 0.1 + 0.2 * Math.sin(Date.now() * 0.012);
+        ctx.fillStyle = `rgba(220,${Math.round(pulse * 80)},255,1)`;
+      } else {
+        const grad = ctx.createLinearGradient(x + 2, y, x + 2 + fillW, y);
+        if (laserState === 'firing') {
+          // Draining: bright cyan → violet
+          grad.addColorStop(0, '#00EEFF');
+          grad.addColorStop(0.5, '#6644FF');
+          grad.addColorStop(1, '#CC44FF');
+        } else {
+          // Idle/warming: violet → cyan (recharging feel)
+          grad.addColorStop(0, '#CC44FF');
+          grad.addColorStop(0.5, '#8844FF');
+          grad.addColorStop(1, '#44AAFF');
+        }
+        ctx.fillStyle = grad;
+      }
+
+      // Glow when firing
+      if (laserState === 'firing') {
+        ctx.shadowColor = '#8844FF';
+        ctx.shadowBlur = 10;
+      }
+      _roundRect(ctx, x + 2, y + 2, fillW, h - 4, 4);
+      ctx.fill();
+      ctx.shadowBlur = 0;
+    }
+
+    // Warm-up progress indicator (pulse on the label)
+    if (laserState === 'warming') {
+      const blink = Math.floor(Date.now() / 200) % 2 === 0;
+      if (blink) {
+        ctx.font = 'bold 20px monospace';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillStyle = '#00CCFF';
+        ctx.fillText('CHARGING', x + w / 2, y + h / 2);
+      }
+    }
+
+    // Tick marks at 25/50/75/100%
+    ctx.strokeStyle = 'rgba(255,255,255,0.25)';
+    ctx.lineWidth = 1;
+    for (let t = 1; t <= 4; t++) {
+      const tx = x + (t / 4) * (w - 4) + 2;
+      ctx.beginPath();
+      ctx.moveTo(tx, y + 2);
+      ctx.lineTo(tx, y + h - 2);
+      ctx.stroke();
+    }
+
+    // LOW ENERGY warning text — blink when near empty
+    if (energy < 0.15 && laserState !== 'idle') {
+      const blink = Math.floor(Date.now() / 300) % 2 === 0;
+      if (blink) {
+        ctx.font = 'bold 20px monospace';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillStyle = '#FF44CC';
+        ctx.fillText('LOW ENERGY', x + w / 2, y + h / 2);
+      }
+    }
+
+    ctx.restore();
+  }
+
+  /**
    * Nuke incoming warning banner at top-center of screen.
    * Blinks and fades out over NUKE_WARNING_DURATION seconds.
    * @param {CanvasRenderingContext2D} ctx
@@ -892,6 +1014,8 @@ export class UI {
       color = '#FFB040';
     } else if (type === 'vulkan') {
       color = '#00FF88';
+    } else if (type === 'laser') {
+      color = '#CC44FF';
     } else {
       color = '#E0FF40';
     }
