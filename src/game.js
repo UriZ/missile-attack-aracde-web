@@ -220,7 +220,13 @@ export class Game {
       laser.onBeamHit      = (x, y) => this.audio.playLaserHit(x);
       // Kill callback — handle scoring and explosion
       laser.onEnemyKilled  = (enemy, typeName) => {
-        this.onEnemyDestroyed(typeName.toLowerCase());
+        // Map constructor name to score type key used by onEnemyDestroyed
+        const typeMap = {
+          Nuke: 'nuke',
+          TransportPlane: 'transport_plane',
+          Paratrooper: 'paratrooper',
+        };
+        this.onEnemyDestroyed(typeMap[typeName] || 'normal');
         this.shakeScreen(8);
       };
       laser.onSpawnExplosion = (x, y, isMega) => {
