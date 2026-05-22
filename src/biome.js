@@ -89,6 +89,20 @@ const BIOMES = {
     cloudDarkness: 0.10,
     mountains:    true,
   },
+  space: {
+    id: 'space',
+    groundTint:    [0.55, 0.52, 0.68],
+    grassTint:     [0.48, 0.44, 0.62],
+    skyTint:       [0.18, 0.14, 0.28],
+    hazeTint:      [0.35, 0.28, 0.55],
+    filter:        'saturate(0.15) brightness(0.80)',
+    heightAmp:     1.2,
+    heightFreq:    0.75,
+    cloudDarkness: 0,
+    mountains:     false,
+    noClouds:      true,
+    starsAlphaMin: 0.85,
+  },
   snowy_mountains: {
     id: 'snowy_mountains',
     groundTint:   [0.92, 0.94, 0.98],
@@ -165,14 +179,23 @@ export class BiomeDayNightProxy {
   get _targetTod() { return this._dn._targetTod; }
 
   getAmbientColor()       { return this._dn.getAmbientColor(); }
-  getStarsAlpha()         { return this._dn.getStarsAlpha(); }
+  getStarsAlpha() {
+    const raw = this._dn.getStarsAlpha();
+    if (this._def.starsAlphaMin !== undefined) {
+      return Math.max(raw, this._def.starsAlphaMin);
+    }
+    return raw;
+  }
   getWindowLightFactor()  { return this._dn.getWindowLightFactor(); }
   setWave(wave)           { return this._dn.setWave(wave); }
   update(dt, wp)          { return this._dn.update(dt, wp); }
   consumeTerrainDirty()   { return this._dn.consumeTerrainDirty(); }
   drawStars(ctx)          { return this._dn.drawStars(ctx); }
   drawCelestialBody(ctx)  { return this._dn.drawCelestialBody(ctx); }
-  drawClouds(ctx, dt)     { return this._dn.drawClouds(ctx, dt); }
+  drawClouds(ctx, dt) {
+    if (this._def.noClouds) return;
+    return this._dn.drawClouds(ctx, dt);
+  }
   drawWeather(ctx, dt)    { return this._dn.drawWeather(ctx, dt); }
 
   /** Sun position helper — needed for lens-flare biome. */
@@ -189,6 +212,40 @@ export class BiomeDayNightProxy {
       y: 900 - Math.sin(t * Math.PI) * 780,
       alpha: Math.min(Math.min((tod - 0.12) / 0.08, 1), Math.min((0.80 - tod) / 0.08, 1)),
     };
+  }
+
+  // ── Nebula haze (space) ───────────────────────────────────────────────────
+
+  _drawNebulaHaze(ctx) {
+    for (const z of this._nebulaZones) {
+      ctx.save();
+      // Build a radial gradient in a unit-circle space, then transform to ellipse
+      ctx.translate(z.x, z.y);
+      ctx.scale(z.rx, z.ry);
+      const grad = ctx.createRadialGradient(0, 0, 0, 0, 0, 1);
+      grad.addColorStop(0,   `rgba(${z.r},${z.g},${z.b},${z.alpha.toFixed(3)})`);
+      grad.addColorStop(1,   `rgba(${z.r},${z.g},${z.b},0)`);
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.arc(0, 0, 1, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+  }
+
+  // ── Dust motes (space) ────────────────────────────────────────────────────
+
+  _drawDustMotes(ctx) {
+    ctx.save();
+    for (const m of this._dustMotes) {
+      ctx.globalAlpha = m.alpha;
+      ctx.fillStyle = `rgba(180,160,220,1)`;
+      ctx.beginPath();
+      ctx.arc(m.x, m.y, m.r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+    ctx.restore();
   }
 
   // ── Internal ─────────────────────────────────────────────────────────────
@@ -239,6 +296,12 @@ export class BiomeSystem {
     // Wind state for rain
     this._windX = randf(-5, -1.5);   // negative = leftward wind
     this._windChangeTimer = 0;
+
+    // Nebula haze zones (space biome)
+    this._nebulaZones = _makeNebulaZones();
+
+    // Dust motes (space biome)
+    this._dustMotes = _makeDustMotes();
 
     // Elapsed time for animations
     this._time = 0;
@@ -311,6 +374,11 @@ export class BiomeSystem {
     if (id === 'desert') {
       _updateShimmer(this._shimmerBands, dt);
     }
+
+    if (id === 'space') {
+      _updateNebulaZones(this._nebulaZones, dt);
+      _updateDustMotes(this._dustMotes, dt, this._time);
+    }
   }
 
   // ── Draw calls ────────────────────────────────────────────────────────────
@@ -324,6 +392,8 @@ export class BiomeSystem {
     if (!this._def) return;
     if (this._def.id === 'riverside') {
       this._drawWater(ctx, terrain);
+    } else if (this._def.id === 'space') {
+      this._drawNebulaHaze(ctx);
     }
   }
 
@@ -345,6 +415,8 @@ export class BiomeSystem {
       this._drawHeatShimmer(ctx);
     } else if (id === 'sunrise') {
       this._drawLensFlare(ctx);
+    } else if (id === 'space') {
+      this._drawDustMotes(ctx);
     }
   }
 
@@ -678,6 +750,65 @@ function _makeShimmerBands() {
 function _updateShimmer(bands, dt) {
   for (const b of bands) {
     b.scrollX += b.speed * dt;
+  }
+}
+
+// ── Space biome particle factories ────────────────────────────────────────────
+
+function _makeNebulaZones() {
+  const zones = [];
+  const count = randi(2, 3);
+  const nebulaColors = [
+    { r: 80,  g: 40,  b: 140 }, // purple
+    { r: 40,  g: 80,  b: 160 }, // blue
+    { r: 140, g: 60,  b: 100 }, // pink
+  ];
+  for (let i = 0; i < count; i++) {
+    const col = nebulaColors[i % nebulaColors.length];
+    zones.push({
+      x:     randf(200, LOGICAL_W - 200),
+      y:     randf(80, 600),
+      rx:    randf(250, 450),
+      ry:    randf(120, 220),
+      r:     col.r,
+      g:     col.g,
+      b:     col.b,
+      alpha: randf(0.04, 0.06),
+      driftSpeed: randf(2, 5), // px/sec horizontal drift
+    });
+  }
+  return zones;
+}
+
+function _updateNebulaZones(zones, dt) {
+  for (const z of zones) {
+    z.x += z.driftSpeed * dt;
+    if (z.x - z.rx > LOGICAL_W) z.x = -z.rx;
+  }
+}
+
+function _makeDustMotes() {
+  const motes = [];
+  for (let i = 0; i < 80; i++) {
+    motes.push({
+      x:         Math.random() * LOGICAL_W,
+      y:         randf(900, 1350),
+      r:         randf(0.8, 2.0),
+      alpha:     randf(0.15, 0.40),
+      speedX:    randf(6, 18),
+      sinePhase: Math.random() * Math.PI * 2,
+      sineAmp:   randf(3, 8),
+      sineFreq:  randf(0.4, 0.9),
+    });
+  }
+  return motes;
+}
+
+function _updateDustMotes(motes, dt, time) {
+  for (const m of motes) {
+    m.x += m.speedX * dt;
+    m.y += Math.sin(time * m.sineFreq + m.sinePhase) * m.sineAmp * dt;
+    if (m.x > LOGICAL_W + 5) m.x -= LOGICAL_W + 10;
   }
 }
 
