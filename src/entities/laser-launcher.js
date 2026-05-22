@@ -94,17 +94,6 @@ export class LaserLauncher extends Launcher {
     this.warmUpTime  = 1.0;   // seconds
     this.warmUpTimer = 0;
 
-    // Base stats for upgrade system — placed here after all numeric stats are set.
-    this._baseStats = {
-      maxEnergy:      this.maxEnergy,
-      drainRate:      this.drainRate,
-      rechargeRate:   this.rechargeRate,
-      rechargeDelay:  this.rechargeDelay,
-      minFireEnergy:  this.minFireEnergy,
-      warmUpTime:     this.warmUpTime,
-      beamMaxRange:   2800,
-    };
-
     // ── State ──
     // 'idle' | 'warming' | 'firing'
     this.laserState = 'idle';
@@ -147,6 +136,23 @@ export class LaserLauncher extends Launcher {
     this.onStopFiring = null;
     /** @type {function|null} Called when beam hits a NEW entity */
     this.onBeamHit = null;
+
+    // Base stats for upgrade system.
+    this._baseStats = {
+      drainRate:      this.drainRate,
+      rechargeRate:   this.rechargeRate,
+      rechargeDelay:  this.rechargeDelay,
+      warmUpTime:     this.warmUpTime,
+      beamMaxRange:   this.beamMaxRange,
+      minFireEnergy:  this.minFireEnergy,
+    };
+    // Mirror back so instance fields always match _baseStats.
+    this.drainRate     = this._baseStats.drainRate;
+    this.rechargeRate  = this._baseStats.rechargeRate;
+    this.rechargeDelay = this._baseStats.rechargeDelay;
+    this.warmUpTime    = this._baseStats.warmUpTime;
+    this.beamMaxRange  = this._baseStats.beamMaxRange;
+    this.minFireEnergy = this._baseStats.minFireEnergy;
     /** @type {function|null} Called by collision/update — game passes enemy list */
     this.getEnemies = null;
     /** @type {function|null} Called when enemy killed by laser */
