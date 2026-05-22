@@ -190,7 +190,22 @@ export class BiomeDayNightProxy {
   setWave(wave)           { return this._dn.setWave(wave); }
   update(dt, wp)          { return this._dn.update(dt, wp); }
   consumeTerrainDirty()   { return this._dn.consumeTerrainDirty(); }
-  drawStars(ctx)          { return this._dn.drawStars(ctx); }
+  drawStars(ctx) {
+    if (this._def.starsAlphaMin === undefined) {
+      return this._dn.drawStars(ctx);
+    }
+    // Temporarily patch getStarsAlpha on the underlying DayNightCycle so that
+    // drawStars() — which calls this.getStarsAlpha() internally — sees the
+    // clamped value. We restore the original immediately after.
+    const orig = this._dn.getStarsAlpha.bind(this._dn);
+    const min  = this._def.starsAlphaMin;
+    this._dn.getStarsAlpha = () => Math.max(orig(), min);
+    try {
+      this._dn.drawStars(ctx);
+    } finally {
+      this._dn.getStarsAlpha = orig;
+    }
+  }
   drawCelestialBody(ctx)  { return this._dn.drawCelestialBody(ctx); }
   drawClouds(ctx, dt) {
     if (this._def.noClouds) return;
@@ -212,40 +227,6 @@ export class BiomeDayNightProxy {
       y: 900 - Math.sin(t * Math.PI) * 780,
       alpha: Math.min(Math.min((tod - 0.12) / 0.08, 1), Math.min((0.80 - tod) / 0.08, 1)),
     };
-  }
-
-  // ── Nebula haze (space) ───────────────────────────────────────────────────
-
-  _drawNebulaHaze(ctx) {
-    for (const z of this._nebulaZones) {
-      ctx.save();
-      // Build a radial gradient in a unit-circle space, then transform to ellipse
-      ctx.translate(z.x, z.y);
-      ctx.scale(z.rx, z.ry);
-      const grad = ctx.createRadialGradient(0, 0, 0, 0, 0, 1);
-      grad.addColorStop(0,   `rgba(${z.r},${z.g},${z.b},${z.alpha.toFixed(3)})`);
-      grad.addColorStop(1,   `rgba(${z.r},${z.g},${z.b},0)`);
-      ctx.fillStyle = grad;
-      ctx.beginPath();
-      ctx.arc(0, 0, 1, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.restore();
-    }
-  }
-
-  // ── Dust motes (space) ────────────────────────────────────────────────────
-
-  _drawDustMotes(ctx) {
-    ctx.save();
-    for (const m of this._dustMotes) {
-      ctx.globalAlpha = m.alpha;
-      ctx.fillStyle = `rgba(180,160,220,1)`;
-      ctx.beginPath();
-      ctx.arc(m.x, m.y, m.r, 0, Math.PI * 2);
-      ctx.fill();
-    }
-    ctx.globalAlpha = 1;
-    ctx.restore();
   }
 
   // ── Internal ─────────────────────────────────────────────────────────────
@@ -671,6 +652,40 @@ export class BiomeSystem {
       ctx.fill();
     }
 
+    ctx.restore();
+  }
+
+  // ── Nebula haze (space) ───────────────────────────────────────────────────
+
+  _drawNebulaHaze(ctx) {
+    for (const z of this._nebulaZones) {
+      ctx.save();
+      // Build a radial gradient in a unit-circle space, then transform to ellipse
+      ctx.translate(z.x, z.y);
+      ctx.scale(z.rx, z.ry);
+      const grad = ctx.createRadialGradient(0, 0, 0, 0, 0, 1);
+      grad.addColorStop(0,   `rgba(${z.r},${z.g},${z.b},${z.alpha.toFixed(3)})`);
+      grad.addColorStop(1,   `rgba(${z.r},${z.g},${z.b},0)`);
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.arc(0, 0, 1, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+  }
+
+  // ── Dust motes (space) ────────────────────────────────────────────────────
+
+  _drawDustMotes(ctx) {
+    ctx.save();
+    for (const m of this._dustMotes) {
+      ctx.globalAlpha = m.alpha;
+      ctx.fillStyle = `rgba(180,160,220,1)`;
+      ctx.beginPath();
+      ctx.arc(m.x, m.y, m.r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
     ctx.restore();
   }
 }

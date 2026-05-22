@@ -328,9 +328,11 @@ export class Terrain extends Entity {
         const roll = Math.random();
         if (biomeId === 'space') {
           // Space: lunar rocks, craters, crystal clusters — 2-4 items per zone
-          if (roll < 0.45) this._addLunarRock(x);
-          else if (roll < 0.75) this._addCrater(x);
-          else this._addCrystalCluster(x);
+          // Sample actual terrain height so decorations sit on the ground.
+          const spaceTerrainY = this.getHeightAt(x);
+          if (roll < 0.45) this._addLunarRock(x, spaceTerrainY);
+          else if (roll < 0.75) this._addCrater(x, spaceTerrainY);
+          else this._addCrystalCluster(x, spaceTerrainY);
         } else if (biomeId === 'desert') {
           // Desert: more rocks/cacti, some buildings, no trees
           if (roll < 0.22) this._addCivilianBuilding(x);
@@ -1597,7 +1599,8 @@ export class Terrain extends Entity {
       ctx.restore();
     };
 
-    this._registerDecoration(x, rx * 2 + 20, drawFn);
+    // Ejecta dots extend up to rx+18 from center; bounding box covers that.
+    this._registerDecoration(x, rx * 2 + 36, drawFn);
   }
 
   // ── Crystal cluster ────────────────────────────────────────
