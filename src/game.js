@@ -30,6 +30,7 @@ import { DayNightCycle } from './day-night.js';
 import { BiomeSystem } from './biome.js';
 import { MegaShield } from './entities/mega-shield.js';
 import { rgba, lerp, randf, dist } from './utils.js';
+import { UpgradeState } from './upgrades/upgrade-state.js';
 
 // Launcher spawn positions (from main.gd / SCENE_DATA)
 const LAUNCHER_POSITIONS = [
@@ -62,6 +63,13 @@ export class Game {
     this.state = 'start';
     this.score = 0;
     this.waveNumber = 0;
+
+    // Economy — reset to 0 in start()
+    this.cash = 0;
+    this.waveScore = 0;
+
+    // Upgrade state — recreated fresh in start()
+    this.upgradeState = new UpgradeState();
 
     /** @type {import('./entities/launcher.js').Launcher|null} */
     this.selectedLauncher = null;
@@ -139,6 +147,10 @@ export class Game {
       if (wave % 5 === 0) {
         this.shieldCharges++;
       }
+      // Convert wave score to cash: base + 25% bonus
+      const earned = this.waveScore + Math.floor(this.waveScore * 0.25);
+      this.cash += earned;
+      this.waveScore = 0;
     };
 
     // Start the loop
@@ -155,6 +167,8 @@ export class Game {
     this.state = 'playing';
     this.score = 0;
     this.waveNumber = 0;
+    this.cash = 0;
+    this.waveScore = 0;
     this.entities.clear();
     this.launchers = [];
     this.selectedLauncher = null;
@@ -163,6 +177,9 @@ export class Game {
     this._vulkanWasFiring = false;
     this._laserFiringLoop = null;
     this._laserMouseWasDown = false;
+
+    // Create a fresh upgrade state for this game session
+    this.upgradeState = new UpgradeState();
 
     // Reset shield
     this.shieldCharges = 99;
@@ -183,6 +200,8 @@ export class Game {
       const launcher = new def.Class(def.x, def.y);
       this.entities.add(launcher);
       this.launchers.push(launcher);
+      // Apply any purchased upgrade effects (no-op if upgradeState is empty at game start)
+      this.upgradeState.applyToWeapon(launcher, null);
     }
 
     // Inject terrain + sibling references into the truck launcher so it can move
@@ -862,7 +881,9 @@ export class Game {
 
   onEnemyDestroyed(type = 'normal') {
     const points = { nuke: 5, transport_plane: 3, paratrooper: 2 };
-    this.score += points[type] || 1;
+    const earned = points[type] || 1;
+    this.score += earned;
+    this.waveScore += earned;
   }
 
   shakeScreen(intensity = 15.0) {

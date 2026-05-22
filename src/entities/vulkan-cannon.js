@@ -74,6 +74,16 @@ export class VulkanCannon extends Launcher {
 
     /** @type {function|null} */
     this.onFireBullet = null;
+
+    // Base stats for upgrade system.
+    this._baseStats = {
+      fireRate:         this.fireRate,
+      heatPerShot:      this.heatPerShot,
+      coolRate:         this.coolRate,
+      overheatCoolRate: this.overheatCoolRate,
+      overheatThreshold:this.overheatThreshold,
+      overheatRecover:  this.overheatRecover,
+    };
   }
 
   setSelected(selected) {

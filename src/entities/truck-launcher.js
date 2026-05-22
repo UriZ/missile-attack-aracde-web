@@ -128,6 +128,19 @@ export class TruckLauncher extends Launcher {
     // Dust particles
     /** @type {DustParticle[]} */
     this._dustParticles = [];
+
+    // Base stats for upgrade system.
+    // moveSpeed: max movement speed in px/s.
+    // missileSpeed: velocity multiplier for launched rockets.
+    // fireCooldown: minimum seconds between shots.
+    this._baseStats = {
+      moveSpeed:    MOVE_SPEED,
+      missileSpeed: 1.0,
+      fireCooldown: 0.0,
+    };
+    this.moveSpeed    = this._baseStats.moveSpeed;
+    this.missileSpeed = this._baseStats.missileSpeed;
+    this.fireCooldown = this._baseStats.fireCooldown;
   }
 
   /**
@@ -144,9 +157,9 @@ export class TruckLauncher extends Launcher {
     super.update(dt);
 
     if (this._moveDir !== 0) {
-      // Accelerate in the requested direction
+      // Accelerate in the requested direction (use instance moveSpeed so upgrades apply)
       this.facingRight = this._moveDir > 0;
-      this.currentSpeed = Math.min(MOVE_SPEED, this.currentSpeed + ACCELERATION * dt);
+      this.currentSpeed = Math.min(this.moveSpeed, this.currentSpeed + ACCELERATION * dt);
 
       const move = this.currentSpeed * this._moveDir * dt;
       this.x = Math.max(MIN_X, Math.min(MAX_X, this.x + move));
