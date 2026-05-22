@@ -63,6 +63,16 @@ export class DronePad extends Launcher {
 
     // Blink timer for EMPTY text
     this._emptyBlinkTimer = 0;
+
+    // Base stats for upgrade system.
+    // stock: starting drone count.
+    // maxActiveDrones: how many can be airborne at once.
+    this._baseStats = {
+      stock:          MAX_STOCK,
+      maxActiveDrones: MAX_ACTIVE_DRONES,
+    };
+    // stock is already set above; maxActiveDrones is currently constant but exposed for upgrades.
+    this.maxActiveDrones = this._baseStats.maxActiveDrones;
   }
 
   /** @param {number} dt */

@@ -88,6 +88,17 @@ export class SAMLauncher extends Launcher {
     this.clickHalfW = 40;
     this.clickHalfH = 50;
     this.turretTipOffset = -62;
+
+    // Base stats — used by UpgradeState to recompute after applying effects.
+    // missileSpeed: multiplier passed to Missile.launchTo (future use).
+    // fireCooldown: minimum seconds between shots (0 = no cooldown by default).
+    this._baseStats = {
+      missileSpeed: 1.0,
+      fireCooldown: 0.0,
+    };
+    // Apply base stats to instance fields so upgrade code can safely read them.
+    this.missileSpeed  = this._baseStats.missileSpeed;
+    this.fireCooldown  = this._baseStats.fireCooldown;
   }
 
   draw(ctx) {

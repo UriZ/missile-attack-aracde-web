@@ -86,6 +86,19 @@ export class HeatSeekerLauncher extends Launcher {
 
     // Independent radar rotation (from launcher.gd: $Turret/RadarMast.rotation += 1.8 * delta)
     this.radarRotation = 0;
+
+    // Base stats for upgrade system.
+    // missileSpeed: future multiplier for heat-seeker velocity.
+    // lockRadius:   crosshair lock-on radius in px (Game currently uses CROSSHAIR_RADIUS=90).
+    // fireCooldown: minimum seconds between shots.
+    this._baseStats = {
+      missileSpeed: 1.0,
+      lockRadius:   90,
+      fireCooldown: 0.0,
+    };
+    this.missileSpeed  = this._baseStats.missileSpeed;
+    this.lockRadius    = this._baseStats.lockRadius;
+    this.fireCooldown  = this._baseStats.fireCooldown;
   }
 
   update(dt) {

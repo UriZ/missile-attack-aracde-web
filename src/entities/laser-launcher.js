@@ -94,6 +94,17 @@ export class LaserLauncher extends Launcher {
     this.warmUpTime  = 1.0;   // seconds
     this.warmUpTimer = 0;
 
+    // Base stats for upgrade system — placed here after all numeric stats are set.
+    this._baseStats = {
+      maxEnergy:      this.maxEnergy,
+      drainRate:      this.drainRate,
+      rechargeRate:   this.rechargeRate,
+      rechargeDelay:  this.rechargeDelay,
+      minFireEnergy:  this.minFireEnergy,
+      warmUpTime:     this.warmUpTime,
+      beamMaxRange:   2800,
+    };
+
     // ── State ──
     // 'idle' | 'warming' | 'firing'
     this.laserState = 'idle';

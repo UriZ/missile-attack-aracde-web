@@ -79,6 +79,18 @@ export class Launcher extends Entity {
   }
 
   /**
+   * Recompute all instance stats from _baseStats.
+   * Subclasses set this._baseStats in their constructor.
+   * Call this before applying upgrade effects so a clean baseline is ensured.
+   */
+  resetToBaseStats() {
+    if (!this._baseStats) return;
+    for (const [stat, value] of Object.entries(this._baseStats)) {
+      this[stat] = value;
+    }
+  }
+
+  /**
    * @param {boolean} selected
    */
   setSelected(selected) {
