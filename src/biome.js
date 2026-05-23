@@ -206,7 +206,117 @@ export class BiomeDayNightProxy {
       this._dn.getStarsAlpha = orig;
     }
   }
-  drawCelestialBody(ctx)  { return this._dn.drawCelestialBody(ctx); }
+  drawCelestialBody(ctx) {
+    if (this._def.id === 'space') {
+      this._drawSpaceCelestials(ctx);
+      return;
+    }
+    return this._dn.drawCelestialBody(ctx);
+  }
+
+  /** Draw twin celestial bodies for space biome — one with Saturn-style rings. */
+  _drawSpaceCelestials(ctx) {
+    ctx.save();
+
+    // ── Primary planet (large, top-right, with rings) ────────────────────────
+    const p1x = 2560 * 0.78;
+    const p1y = 160;
+    const p1r = 72;
+
+    // Glow halo
+    const halo1 = ctx.createRadialGradient(p1x, p1y, p1r * 0.5, p1x, p1y, p1r * 3.5);
+    halo1.addColorStop(0, 'rgba(180,140,220,0.20)');
+    halo1.addColorStop(1, 'rgba(120,80,180,0)');
+    ctx.fillStyle = halo1;
+    ctx.beginPath();
+    ctx.arc(p1x, p1y, p1r * 3.5, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Saturn rings (drawn behind planet via clip)
+    ctx.save();
+    // Back half of ring (behind planet)
+    ctx.beginPath();
+    ctx.ellipse(p1x, p1y, p1r * 2.8, p1r * 0.55, -0.15, Math.PI, Math.PI * 2);
+    ctx.strokeStyle = 'rgba(200,170,240,0.35)';
+    ctx.lineWidth = 12;
+    ctx.stroke();
+    ctx.strokeStyle = 'rgba(160,130,200,0.25)';
+    ctx.lineWidth = 6;
+    ctx.beginPath();
+    ctx.ellipse(p1x, p1y, p1r * 2.2, p1r * 0.42, -0.15, Math.PI, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+
+    // Planet disc
+    const disc1 = ctx.createRadialGradient(p1x - p1r * 0.3, p1y - p1r * 0.3, 0, p1x, p1y, p1r);
+    disc1.addColorStop(0, 'rgba(200,170,240,1)');
+    disc1.addColorStop(0.6, 'rgba(140,100,180,1)');
+    disc1.addColorStop(1, 'rgba(80,50,120,1)');
+    ctx.fillStyle = disc1;
+    ctx.beginPath();
+    ctx.arc(p1x, p1y, p1r, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Surface bands
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(p1x, p1y, p1r, 0, Math.PI * 2);
+    ctx.clip();
+    ctx.globalAlpha = 0.15;
+    ctx.fillStyle = '#A080C0';
+    ctx.fillRect(p1x - p1r, p1y - p1r * 0.1, p1r * 2, p1r * 0.15);
+    ctx.fillStyle = '#6040A0';
+    ctx.fillRect(p1x - p1r, p1y + p1r * 0.25, p1r * 2, p1r * 0.12);
+    ctx.fillStyle = '#C0A0E0';
+    ctx.fillRect(p1x - p1r, p1y - p1r * 0.45, p1r * 2, p1r * 0.08);
+    ctx.restore();
+
+    // Front half of rings (over planet)
+    ctx.save();
+    ctx.beginPath();
+    ctx.ellipse(p1x, p1y, p1r * 2.8, p1r * 0.55, -0.15, 0, Math.PI);
+    ctx.strokeStyle = 'rgba(200,170,240,0.45)';
+    ctx.lineWidth = 12;
+    ctx.stroke();
+    ctx.strokeStyle = 'rgba(160,130,200,0.30)';
+    ctx.lineWidth = 6;
+    ctx.beginPath();
+    ctx.ellipse(p1x, p1y, p1r * 2.2, p1r * 0.42, -0.15, 0, Math.PI);
+    ctx.stroke();
+    ctx.restore();
+
+    // ── Secondary body (smaller, top-left, no rings — alien moon) ────────────
+    const p2x = 2560 * 0.22;
+    const p2y = 110;
+    const p2r = 38;
+
+    // Glow
+    const halo2 = ctx.createRadialGradient(p2x, p2y, p2r * 0.5, p2x, p2y, p2r * 3);
+    halo2.addColorStop(0, 'rgba(100,200,180,0.18)');
+    halo2.addColorStop(1, 'rgba(60,160,140,0)');
+    ctx.fillStyle = halo2;
+    ctx.beginPath();
+    ctx.arc(p2x, p2y, p2r * 3, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Disc — teal/green alien moon
+    const disc2 = ctx.createRadialGradient(p2x - p2r * 0.25, p2y - p2r * 0.25, 0, p2x, p2y, p2r);
+    disc2.addColorStop(0, 'rgba(140,230,210,1)');
+    disc2.addColorStop(0.7, 'rgba(60,160,140,1)');
+    disc2.addColorStop(1, 'rgba(30,80,70,1)');
+    ctx.fillStyle = disc2;
+    ctx.beginPath();
+    ctx.arc(p2x, p2y, p2r, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Crescent shadow
+    ctx.fillStyle = 'rgba(5,15,12,0.50)';
+    ctx.beginPath();
+    ctx.arc(p2x + p2r * 0.35, p2y, p2r * 0.85, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.restore();
+  }
   drawClouds(ctx, dt) {
     if (this._def.noClouds) return;
     return this._dn.drawClouds(ctx, dt);
@@ -284,6 +394,10 @@ export class BiomeSystem {
     // Dust motes (space biome)
     this._dustMotes = _makeDustMotes();
 
+    // Shooting stars (space biome)
+    this._shootingStars = [];
+    this._shootingStarTimer = randf(1.5, 4);
+
     // Elapsed time for animations
     this._time = 0;
   }
@@ -359,6 +473,7 @@ export class BiomeSystem {
     if (id === 'space') {
       _updateNebulaZones(this._nebulaZones, dt);
       _updateDustMotes(this._dustMotes, dt, this._time);
+      this._updateShootingStars(dt);
     }
   }
 
@@ -375,6 +490,7 @@ export class BiomeSystem {
       this._drawWater(ctx, terrain);
     } else if (this._def.id === 'space') {
       this._drawNebulaHaze(ctx);
+      this._drawShootingStars(ctx);
     }
   }
 
@@ -686,6 +802,89 @@ export class BiomeSystem {
       ctx.fill();
     }
     ctx.globalAlpha = 1;
+    ctx.restore();
+  }
+
+  // ── Shooting stars (space biome) ─────────────────────────────────────────
+
+  _updateShootingStars(dt) {
+    // Spawn new shooting stars on a timer
+    this._shootingStarTimer -= dt;
+    if (this._shootingStarTimer <= 0) {
+      this._shootingStarTimer = randf(1.0, 3.5);
+      // Random start in upper portion of sky
+      const sx = randf(-200, LOGICAL_W * 0.8);
+      const sy = randf(20, 500);
+      // Angle: mostly downward-right, slight variation
+      const angle = randf(0.3, 0.7); // radians from horizontal
+      const speed = randf(600, 1200);
+      this._shootingStars.push({
+        x: sx, y: sy,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed,
+        life: 0,
+        maxLife: randf(0.6, 1.4),
+        length: randf(150, 350),
+        brightness: randf(0.8, 1.0),
+      });
+    }
+
+    // Update active shooting stars
+    for (let i = this._shootingStars.length - 1; i >= 0; i--) {
+      const s = this._shootingStars[i];
+      s.life += dt;
+      s.x += s.vx * dt;
+      s.y += s.vy * dt;
+      if (s.life >= s.maxLife || s.x > LOGICAL_W + 200 || s.y > LOGICAL_H) {
+        this._shootingStars.splice(i, 1);
+      }
+    }
+  }
+
+  _drawShootingStars(ctx) {
+    ctx.save();
+    for (const s of this._shootingStars) {
+      // Fade in quickly, fade out near end of life
+      const lifeT = s.life / s.maxLife;
+      const alpha = s.brightness * (lifeT < 0.15 ? lifeT / 0.15 : 1 - Math.pow((lifeT - 0.15) / 0.85, 2));
+      if (alpha <= 0) continue;
+
+      // Trail direction (opposite of velocity)
+      const speed = Math.sqrt(s.vx * s.vx + s.vy * s.vy);
+      const dx = -s.vx / speed;
+      const dy = -s.vy / speed;
+
+      // Head position
+      const hx = s.x;
+      const hy = s.y;
+      // Tail position
+      const tx = hx + dx * s.length;
+      const ty = hy + dy * s.length;
+
+      // Gradient trail: bright white head → transparent tail
+      const grad = ctx.createLinearGradient(hx, hy, tx, ty);
+      grad.addColorStop(0, `rgba(220,230,255,${alpha.toFixed(3)})`);
+      grad.addColorStop(0.3, `rgba(180,200,255,${(alpha * 0.5).toFixed(3)})`);
+      grad.addColorStop(1, 'rgba(140,160,220,0)');
+
+      ctx.strokeStyle = grad;
+      ctx.lineWidth = 3.5;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(hx, hy);
+      ctx.lineTo(tx, ty);
+      ctx.stroke();
+
+      // Bright head glow
+      ctx.save();
+      ctx.shadowColor = 'rgba(200,220,255,0.8)';
+      ctx.shadowBlur = 16;
+      ctx.fillStyle = `rgba(255,255,255,${alpha.toFixed(3)})`;
+      ctx.beginPath();
+      ctx.arc(hx, hy, 3.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
     ctx.restore();
   }
 }
