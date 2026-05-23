@@ -88,17 +88,26 @@ export class HeatSeekerLauncher extends Launcher {
     this.radarRotation = 0;
 
     // Base stats for upgrade system.
-    // missileSpeed: future multiplier for heat-seeker velocity.
-    // lockRadius:   crosshair lock-on radius in px (Game currently uses CROSSHAIR_RADIUS=90).
-    // fireCooldown: minimum seconds between shots.
+    // missileSpeed:   future multiplier for heat-seeker velocity.
+    // lockRadius:     crosshair lock-on radius in px (Game currently uses CROSSHAIR_RADIUS=90).
+    // fireCooldown:   minimum seconds between shots.
+    // trackingSpeed:  multiplier for seeker tracking turn rate.
+    // splitEnabled:   if true, missile splits into independently-guided submunitions.
+    // splitCount:     number of submunitions when splitEnabled.
     this._baseStats = {
-      missileSpeed: 1.0,
-      lockRadius:   90,
-      fireCooldown: 0.0,
+      missileSpeed:   1.0,
+      lockRadius:     90,
+      fireCooldown:   0.0,
+      trackingSpeed:  1.0,
+      splitEnabled:   false,
+      splitCount:     0,
     };
-    this.missileSpeed  = this._baseStats.missileSpeed;
-    this.lockRadius    = this._baseStats.lockRadius;
-    this.fireCooldown  = this._baseStats.fireCooldown;
+    this.missileSpeed   = this._baseStats.missileSpeed;
+    this.lockRadius     = this._baseStats.lockRadius;
+    this.fireCooldown   = this._baseStats.fireCooldown;
+    this.trackingSpeed  = this._baseStats.trackingSpeed;
+    this.splitEnabled   = this._baseStats.splitEnabled;
+    this.splitCount     = this._baseStats.splitCount;
   }
 
   update(dt) {

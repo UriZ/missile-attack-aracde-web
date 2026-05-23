@@ -118,6 +118,8 @@ export class Audio {
     this.laserFiringLoopBuffer = null;
     this.laserHitBuffer = null;
 
+    this.purchaseBuffer = null;
+
     this.radioChatterBuffers = [];
     this._radioChatterLoaded = false;
     this._chatterPlaying = false;
@@ -160,6 +162,7 @@ export class Audio {
     this.laserWarmUpBuffer      = this._generateLaserWarmUpBuffer();
     this.laserFiringLoopBuffer  = this._generateLaserFiringLoopBuffer();
     this.laserHitBuffer         = this._generateLaserHitBuffer();
+    this.purchaseBuffer         = this._generatePurchaseBuffer();
 
     this._loadRadioChatter();
     this._loadThunder();
@@ -324,6 +327,14 @@ export class Audio {
   playShieldWarningBeeps() {
     if (!this.audioCtx) return;
     this._playBuffer(this.shieldWarningBuffer, 4.0, 1.0, 0);
+  }
+
+  /**
+   * Short ascending two-tone confirmation beep (~0.1s) — upgrade purchased.
+   */
+  playPurchaseSound() {
+    if (!this.audioCtx) return;
+    this._playBuffer(this.purchaseBuffer, 4.0, 1.0, 0);
   }
 
   /**
@@ -1118,6 +1129,39 @@ export class Audio {
       val = Math.tanh(val * 3.0) / Math.tanh(3.0);
 
       samples[i] = val;
+    }
+
+    return this._createBuffer(samples, sampleRate);
+  }
+
+  // -- Purchase confirmation: ascending two-tone beep, 100ms ----------------
+  _generatePurchaseBuffer() {
+    const sampleRate = 22050;
+    const duration = 0.12;
+    const numSamples = Math.floor(sampleRate * duration);
+    const samples = new Float32Array(numSamples);
+
+    // Two tones: first at 880 Hz (0..55ms), second at 1320 Hz (55ms..110ms)
+    const beeps = [
+      { start: 0.000, end: 0.055, freq: 880  },
+      { start: 0.055, end: 0.110, freq: 1320 },
+    ];
+
+    for (let i = 0; i < numSamples; i++) {
+      const t = i / sampleRate;
+      let val = 0;
+
+      for (const beep of beeps) {
+        if (t < beep.start || t >= beep.end) continue;
+        const bt = t - beep.start;
+        // Linear attack (3ms), exponential decay
+        const env = Math.min(bt / 0.003, 1.0) * Math.exp(-12 * Math.max(0, bt - 0.003));
+        val += Math.sin(TAU * beep.freq * bt) * 0.55 * env;
+        // Slight second harmonic for brightness
+        val += Math.sin(TAU * beep.freq * 2 * bt) * 0.08 * env;
+      }
+
+      samples[i] = Math.tanh(val * 1.5) / Math.tanh(1.5);
     }
 
     return this._createBuffer(samples, sampleRate);

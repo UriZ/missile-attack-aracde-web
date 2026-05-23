@@ -32,6 +32,7 @@ import { MegaShield } from './entities/mega-shield.js';
 import { rgba, lerp, randf, dist } from './utils.js';
 import { UpgradeState } from './upgrades/upgrade-state.js';
 import { ShopUI } from './ui/shop.js';
+import { UPGRADE_CONFIG } from './upgrades/upgrade-config.js';
 
 // Launcher spawn positions (from main.gd / SCENE_DATA)
 const LAUNCHER_POSITIONS = [
@@ -965,6 +966,54 @@ export class Game {
         this._laserFiringLoop = null;
       }
     }
+  }
+
+  /**
+   * Attempt to purchase an upgrade by ID.
+   *
+   * Flow:
+   *   1. Look up the upgrade definition in UPGRADE_CONFIG.
+   *   2. Call upgradeState.purchase() — checks prereqs, cash, deducts cost.
+   *   3. Apply effects to all launchers of the relevant weapon type.
+   *   4. Play purchase confirmation sound.
+   *
+   * @param {string} upgradeId  — e.g. 'sam_fast_propellant'
+   * @returns {boolean} true if purchase succeeded
+   */
+  purchaseUpgrade(upgradeId) {
+    // Find upgrade definition across all weapon configs
+    let upgradeDef = null;
+    let weaponConfig = null;
+    for (const [, cfg] of Object.entries(UPGRADE_CONFIG)) {
+      const found = cfg.upgrades.find(u => u.id === upgradeId);
+      if (found) {
+        upgradeDef = found;
+        weaponConfig = cfg;
+        break;
+      }
+    }
+
+    if (!upgradeDef) {
+      console.warn(`purchaseUpgrade: unknown upgrade id "${upgradeId}"`);
+      return false;
+    }
+
+    // Attempt purchase — deducts cash if canPurchase passes
+    const ok = this.upgradeState.purchase(upgradeDef, this);
+    if (!ok) return false;
+
+    // Determine which weapon type(s) the upgrade affects and reapply to launchers
+    const affectedWeapons = new Set(upgradeDef.effects.map(e => e.weapon));
+    for (const launcher of this.launchers) {
+      if (affectedWeapons.has(launcher.type)) {
+        this.upgradeState.applyToWeapon(launcher, weaponConfig);
+      }
+    }
+
+    // Play confirmation sound
+    this.audio.playPurchaseSound();
+
+    return true;
   }
 
   _resetChatterTimer() {

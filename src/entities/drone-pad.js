@@ -48,7 +48,8 @@ export class DronePad extends Launcher {
     this.turretTipOffset = -70; // used for drone spawn height offset
 
     // Cooldown / active count tracking
-    this.deployCooldown = 0;
+    // _deployCooldownTimer: runtime countdown (decrements toward 0 each frame)
+    this._deployCooldownTimer = 0;
     this.activeDroneCount = 0;
 
     // Stock: total drones remaining (5 at start)
@@ -65,14 +66,23 @@ export class DronePad extends Launcher {
     this._emptyBlinkTimer = 0;
 
     // Base stats for upgrade system.
-    // stock: starting drone count.
+    // maxStock:        starting/max drone count (upgrade-config uses 'maxStock').
     // maxActiveDrones: how many can be airborne at once.
+    // deployCooldown:  seconds between drone deploys (0 = no cooldown by default).
+    // armedDrone:      if true, drones carry a warhead and explode on impact.
     this._baseStats = {
-      stock:          MAX_STOCK,
+      maxStock:        MAX_STOCK,
       maxActiveDrones: MAX_ACTIVE_DRONES,
+      deployCooldown:  DEPLOY_COOLDOWN,
+      armedDrone:      false,
     };
-    // stock is already set above; maxActiveDrones is currently constant but exposed for upgrades.
+    // maxActiveDrones is currently constant but exposed for upgrades.
     this.maxActiveDrones = this._baseStats.maxActiveDrones;
+    // deployCooldown is the config max duration; _deployCooldownTimer is the runtime countdown.
+    this.deployCooldown  = this._baseStats.deployCooldown;
+    this.armedDrone      = this._baseStats.armedDrone;
+    // Sync stock to maxStock base value
+    this.stock = this._baseStats.maxStock;
   }
 
   /** @param {number} dt */
@@ -84,9 +94,9 @@ export class DronePad extends Launcher {
       this._glowAlpha = 0.375 + 0.125 * Math.sin(this._glowTime * Math.PI / 0.6);
     }
 
-    // Cooldown tick
-    if (this.deployCooldown > 0) {
-      this.deployCooldown -= dt;
+    // Cooldown tick — count down the runtime timer
+    if (this._deployCooldownTimer > 0) {
+      this._deployCooldownTimer -= dt;
     }
 
     // Arm tilt animation — lerp toward target, auto-reset after reaching it
@@ -109,7 +119,7 @@ export class DronePad extends Launcher {
   canDeploy() {
     return this.alive &&
            this.stock > 0 &&
-           this.deployCooldown <= 0;
+           this._deployCooldownTimer <= 0;
   }
 
   /**
@@ -118,7 +128,8 @@ export class DronePad extends Launcher {
   onDroneDeployed() {
     this.activeDroneCount++;
     this.stock = Math.max(0, this.stock - 1);
-    this.deployCooldown = DEPLOY_COOLDOWN;
+    // Reset runtime timer to the config max (may be upgraded to 0)
+    this._deployCooldownTimer = this.deployCooldown;
     // Kick the arm animation
     this._armTiltTarget = 0.28; // ~16 degrees
   }
@@ -314,8 +325,8 @@ export class DronePad extends Launcher {
     }
 
     // ── Cooldown arc (when on cooldown) ───────────────────────────────────────
-    if (this.deployCooldown > 0) {
-      const fraction = this.deployCooldown / DEPLOY_COOLDOWN;
+    if (this._deployCooldownTimer > 0 && this.deployCooldown > 0) {
+      const fraction = this._deployCooldownTimer / this.deployCooldown;
       ctx.save();
       ctx.strokeStyle = 'rgba(0,207,255,0.5)';
       ctx.lineWidth = 3;

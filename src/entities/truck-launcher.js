@@ -130,17 +130,26 @@ export class TruckLauncher extends Launcher {
     this._dustParticles = [];
 
     // Base stats for upgrade system.
-    // moveSpeed: max movement speed in px/s.
-    // missileSpeed: velocity multiplier for launched rockets.
-    // fireCooldown: minimum seconds between shots.
+    // moveSpeed:       max movement speed in px/s.
+    // missileSpeed:    velocity multiplier for launched rockets.
+    // fireCooldown:    minimum seconds between shots.
+    // explosionRadius: multiplier applied to rocket explosion radius.
+    // splitEnabled:    if true, rocket splits into submunitions on detonation.
+    // splitCount:      number of submunitions when splitEnabled.
     this._baseStats = {
-      moveSpeed:    MOVE_SPEED,
-      missileSpeed: 1.0,
-      fireCooldown: 0.0,
+      moveSpeed:       MOVE_SPEED,
+      missileSpeed:    1.0,
+      fireCooldown:    0.0,
+      explosionRadius: 1.0,
+      splitEnabled:    false,
+      splitCount:      0,
     };
-    this.moveSpeed    = this._baseStats.moveSpeed;
-    this.missileSpeed = this._baseStats.missileSpeed;
-    this.fireCooldown = this._baseStats.fireCooldown;
+    this.moveSpeed       = this._baseStats.moveSpeed;
+    this.missileSpeed    = this._baseStats.missileSpeed;
+    this.fireCooldown    = this._baseStats.fireCooldown;
+    this.explosionRadius = this._baseStats.explosionRadius;
+    this.splitEnabled    = this._baseStats.splitEnabled;
+    this.splitCount      = this._baseStats.splitCount;
   }
 
   /**

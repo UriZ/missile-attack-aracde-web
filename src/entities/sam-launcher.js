@@ -90,15 +90,24 @@ export class SAMLauncher extends Launcher {
     this.turretTipOffset = -62;
 
     // Base stats — used by UpgradeState to recompute after applying effects.
-    // missileSpeed: multiplier passed to Missile.launchTo (future use).
-    // fireCooldown: minimum seconds between shots (0 = no cooldown by default).
+    // missileSpeed:    multiplier passed to Missile.launchTo (future use).
+    // fireCooldown:    minimum seconds between shots (0 = no cooldown by default).
+    // explosionRadius: multiplier applied to missile explosion radius.
+    // splitEnabled:    if true, missile splits into submunitions on detonation.
+    // splitCount:      number of submunitions when splitEnabled.
     this._baseStats = {
-      missileSpeed: 1.0,
-      fireCooldown: 0.0,
+      missileSpeed:    1.0,
+      fireCooldown:    0.0,
+      explosionRadius: 1.0,
+      splitEnabled:    false,
+      splitCount:      0,
     };
     // Apply base stats to instance fields so upgrade code can safely read them.
-    this.missileSpeed  = this._baseStats.missileSpeed;
-    this.fireCooldown  = this._baseStats.fireCooldown;
+    this.missileSpeed    = this._baseStats.missileSpeed;
+    this.fireCooldown    = this._baseStats.fireCooldown;
+    this.explosionRadius = this._baseStats.explosionRadius;
+    this.splitEnabled    = this._baseStats.splitEnabled;
+    this.splitCount      = this._baseStats.splitCount;
   }
 
   draw(ctx) {

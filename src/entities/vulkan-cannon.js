@@ -76,6 +76,8 @@ export class VulkanCannon extends Launcher {
     this.onFireBullet = null;
 
     // Base stats for upgrade system.
+    // bulletsPerShot: number of bullets fired per trigger pull (1 = default).
+    // autoAim:        if true, turret automatically tracks the nearest enemy.
     this._baseStats = {
       fireRate:         this.fireRate,
       heatPerShot:      this.heatPerShot,
@@ -83,7 +85,11 @@ export class VulkanCannon extends Launcher {
       overheatCoolRate: this.overheatCoolRate,
       overheatThreshold:this.overheatThreshold,
       overheatRecover:  this.overheatRecover,
+      bulletsPerShot:   1,
+      autoAim:          false,
     };
+    this.bulletsPerShot = this._baseStats.bulletsPerShot;
+    this.autoAim        = this._baseStats.autoAim;
   }
 
   setSelected(selected) {

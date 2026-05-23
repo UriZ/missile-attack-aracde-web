@@ -138,6 +138,10 @@ export class LaserLauncher extends Launcher {
     this.onBeamHit = null;
 
     // Base stats for upgrade system.
+    // maxEnergy:    normalized energy capacity scale (1.0 = base 100%). Multiplying
+    //               increases effective drain budget before depletion.
+    // chainEnabled: if true, beam chains to additional nearby enemies.
+    // chainCount:   number of extra chain targets when chainEnabled.
     this._baseStats = {
       drainRate:      this.drainRate,
       rechargeRate:   this.rechargeRate,
@@ -145,6 +149,9 @@ export class LaserLauncher extends Launcher {
       warmUpTime:     this.warmUpTime,
       beamMaxRange:   this.beamMaxRange,
       minFireEnergy:  this.minFireEnergy,
+      maxEnergy:      this.maxEnergy,
+      chainEnabled:   false,
+      chainCount:     0,
     };
     // Mirror back so instance fields always match _baseStats.
     this.drainRate     = this._baseStats.drainRate;
@@ -153,6 +160,9 @@ export class LaserLauncher extends Launcher {
     this.warmUpTime    = this._baseStats.warmUpTime;
     this.beamMaxRange  = this._baseStats.beamMaxRange;
     this.minFireEnergy = this._baseStats.minFireEnergy;
+    this.maxEnergy     = this._baseStats.maxEnergy;
+    this.chainEnabled  = this._baseStats.chainEnabled;
+    this.chainCount    = this._baseStats.chainCount;
     /** @type {function|null} Called by collision/update — game passes enemy list */
     this.getEnemies = null;
     /** @type {function|null} Called when enemy killed by laser */
