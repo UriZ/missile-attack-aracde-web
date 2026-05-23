@@ -31,6 +31,7 @@ import { BiomeSystem } from './biome.js';
 import { MegaShield } from './entities/mega-shield.js';
 import { rgba, lerp, randf, dist } from './utils.js';
 import { UpgradeState } from './upgrades/upgrade-state.js';
+import { ShopUI } from './ui/shop.js';
 
 // Launcher spawn positions (from main.gd / SCENE_DATA)
 const LAUNCHER_POSITIONS = [
@@ -59,8 +60,14 @@ export class Game {
     this.waves = new WaveSystem();
     this.ui = new UI(this.renderer);
 
-    /** @type {'start' | 'playing' | 'gameover'} */
+    /** @type {'start' | 'playing' | 'shop' | 'gameover'} */
     this.state = 'start';
+
+    // Shop UI
+    this.shopUI = new ShopUI();
+    this.shopUI.onClose = () => this._onShopClose();
+    /** @type {number} delay before shop opens after wave clear */
+    this._shopOpenDelay = 0;
     this.score = 0;
     this.waveNumber = 0;
 
@@ -151,6 +158,8 @@ export class Game {
       const earned = this.waveScore + Math.floor(this.waveScore * 0.25);
       this.cash += earned;
       this.waveScore = 0;
+      // Open shop after 1.5s delay (lets the CLEAR banner play first)
+      this._shopOpenDelay = 1.5;
     };
 
     // Start the loop
@@ -180,6 +189,9 @@ export class Game {
 
     // Create a fresh upgrade state for this game session
     this.upgradeState = new UpgradeState();
+
+    // Reset shop state
+    this._shopOpenDelay = 0;
 
     // Reset shield
     this.shieldCharges = 99;
@@ -293,6 +305,8 @@ export class Game {
       }
     } else if (this.state === 'playing') {
       this._updatePlaying(dt);
+    } else if (this.state === 'shop') {
+      this._updateShop(dt);
     } else if (this.state === 'gameover') {
       this.entities.update(dt);
       if (this.input.mouseJustPressed) {
@@ -394,6 +408,41 @@ export class Game {
         this._chatterTimer = this._chatterInterval - 1.0;
       }
     }
+
+    // Shop open delay — transition to shop state after wave clear
+    if (this._shopOpenDelay > 0) {
+      this._shopOpenDelay -= dt;
+      if (this._shopOpenDelay <= 0) {
+        this._shopOpenDelay = 0;
+        this.state = 'shop';
+        this.shopUI.open(this);
+      }
+    }
+  }
+
+  /** @param {number} dt */
+  _updateShop(dt) {
+    // Keep entities alive (explosions, smoke, etc.) but don't update waves
+    this.entities.update(dt);
+
+    // Tick down any screen shake
+    if (this.shakeIntensity > 0.01) {
+      this.shakeIntensity = lerp(this.shakeIntensity, 0, this.shakeDecay * dt);
+    } else {
+      this.shakeIntensity = 0;
+      this.renderer.cameraOffsetX = 0;
+      this.renderer.cameraOffsetY = 0;
+    }
+
+    // Update shop UI (handles input, animations)
+    this.shopUI.update(dt, this, this.input);
+  }
+
+  /** Called by ShopUI.onClose when the player clicks READY. */
+  _onShopClose() {
+    // Resume playing — wave system picks up from betweenWave timer
+    this.state = 'playing';
+    this._resetChatterTimer();
   }
 
   // ── Rendering ──────────────────────────────────────────────
@@ -404,7 +453,7 @@ export class Game {
 
     r.beginFrame();
 
-    if (this.state === 'playing' || this.state === 'gameover') {
+    if (this.state === 'playing' || this.state === 'gameover' || this.state === 'shop') {
       // Dynamic sky gradient from day/night cycle
       const sky = this.dayNight.getSkyColors();
       const skyGrad = ctx.createLinearGradient(0, 0, 0, Renderer.LOGICAL_H);
@@ -419,7 +468,24 @@ export class Game {
       ctx.fillRect(0, 0, Renderer.LOGICAL_W, Renderer.LOGICAL_H);
     }
 
-    if (this.state === 'start') {
+    if (this.state === 'shop') {
+      // Render frozen gameplay first, then shop overlay on top
+      this.dayNight.drawStars(ctx);
+      this.dayNight.drawCelestialBody(ctx);
+      this.dayNight.drawClouds(ctx, this._lastDt);
+      this.biomeSystem.drawBehindTerrain(ctx, this.terrain);
+      if (this.activeShield && this.activeShield.alive) {
+        this.activeShield.drawInterior(ctx);
+      }
+      this.entities.draw(ctx);
+      if (this.activeShield && this.activeShield.alive) {
+        this.activeShield.drawGlow(ctx);
+      }
+
+      // Shop overlay (UI layer — no shake)
+      r.beginUI();
+      this.shopUI.draw(ctx, this);
+    } else if (this.state === 'start') {
       r.beginUI();
 
       // Background: vertical gradient #020408 → #060A18 → #040608
