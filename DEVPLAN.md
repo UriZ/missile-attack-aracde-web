@@ -146,7 +146,27 @@ create a nuker interceptor - whihch allows you to shoot nukes at eney missiles1
 - implement an intereceptor that shoots lazer beams... it takes a second to worm up...
 
 ### 21 switch vision mode
-- support two modes: night vision and thermal 
+- support two modes: night vision and thermal
+
+### 22 Enemy Quadcopter Drones
+**Status:** Planned | **GitHub:** #62
+
+DJI Matrice-style quad drones as a new enemy type. Two variants:
+- **Attack quad**: hovers in place or slowly drifts, fires downward bursts at player assets (launchers, buildings). Has HP (takes 2-3 hits to destroy). Rotors spin visually.
+- **Kamikaze quad**: flies toward a target launcher/building and detonates on contact (like suicide drone but hovers and is slower, harder to hit due to small size and erratic movement)
+
+Visual inspiration: DJI Matrice 4 — compact body with 4 arms, spinning rotors with orange tips, camera/gimbal underneath, landing gear legs. Draw procedurally on canvas.
+
+Behavior:
+- Spawn from screen edges (left/right), fly to a hover position
+- Attack variant: hover + slight bob, fire small red tracers downward every 2-3s
+- Kamikaze variant: hover briefly then dive toward nearest alive launcher
+- Both have slight lateral drift and vertical bob for realistic hover feel
+- Destroyed: sparks + smoke trail as it spirals down, small explosion on ground impact
+- Points: attack=3, kamikaze=2
+- Wave budget: attack=4, kamikaze=3
+- Spawns from wave 3+
+
 ## GitHub Issue Tracker1
 
 | # | Title | State | Labels |
