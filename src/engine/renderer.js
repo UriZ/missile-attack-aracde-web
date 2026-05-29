@@ -50,6 +50,11 @@ export class Renderer {
    * Begin a new frame: clear canvas and set up the logical-to-physical transform
    * including camera shake offset. Clips all rendering to the logical viewport
    * so nothing bleeds into letterbox bars on non-16:9 aspect ratios.
+   *
+   * Order of operations:
+   *   1. Set base transform (scale + letterbox offset, NO shake) — clip is in this space
+   *   2. Apply clip rect at (0, 0, LOGICAL_W, LOGICAL_H) — anchored to screen, not shaken
+   *   3. Translate by camera shake offset so game content shakes inside the fixed clip
    */
   beginFrame() {
     const ctx = this.ctx;
@@ -59,21 +64,27 @@ export class Renderer {
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, c.width, c.height);
 
-    // Apply DPR + logical scaling + letterbox offset + camera shake
+    // Step 1: base transform — DPR scaling + letterbox offset, without shake.
+    // The clip must be set in this space so it stays fixed to the screen.
     const totalScale = this.scale * devicePixelRatio;
     ctx.setTransform(
       totalScale, 0,
       0, totalScale,
-      (this.offsetX + this.cameraOffsetX * this.scale) * devicePixelRatio,
-      (this.offsetY + this.cameraOffsetY * this.scale) * devicePixelRatio
+      this.offsetX * devicePixelRatio,
+      this.offsetY * devicePixelRatio
     );
 
-    // Clip to the logical viewport so entities at negative Y (or beyond LOGICAL_W/H)
-    // do not render into the letterbox bars on non-16:9 windows.
+    // Step 2: clip to the logical viewport in pre-shake space.
+    // This ensures the clip rect never moves even when cameraOffset is non-zero,
+    // preventing explosions or other entities from bleeding into the letterbox bars.
     ctx.save();
     ctx.beginPath();
     ctx.rect(0, 0, Renderer.LOGICAL_W, Renderer.LOGICAL_H);
     ctx.clip();
+
+    // Step 3: apply the camera shake on top as a translation in logical coords.
+    // Content shakes within the fixed clip region established above.
+    ctx.translate(this.cameraOffsetX, this.cameraOffsetY);
   }
 
   /**
