@@ -51,6 +51,15 @@ function isParatrooper(e) { return e.constructor.name === 'Paratrooper'; }
 /** @param {import('./entities/entity.js').Entity} e */
 function isHunterDrone(e) { return e.constructor.name === 'HunterDrone'; }
 
+/** @param {import('./entities/entity.js').Entity} e */
+function isAttackQuad(e) { return e.constructor.name === 'AttackQuad'; }
+
+/** @param {import('./entities/entity.js').Entity} e */
+function isKamikazeQuad(e) { return e.constructor.name === 'KamikazeQuad'; }
+
+/** @param {import('./entities/entity.js').Entity} e */
+function isQuadTracer(e) { return e.constructor.name === 'QuadTracer'; }
+
 // ------------------------------------------------------------------
 // Geometry helpers
 // ------------------------------------------------------------------
@@ -270,6 +279,29 @@ export class CollisionSystem {
 
           spawnExplosion(entityManager, game, mx, my, false);
           game.onEnemyDestroyed('paratrooper');
+        } else if (isAttackQuad(enemy)) {
+          // AttackQuad absorbs hits — reduces HP, destroyed when HP reaches 0.
+          hit.add(proj);
+          proj.destroy();
+
+          const destroyed = enemy.takeDamage(1);
+          spawnExplosion(entityManager, game, mx, my, false);
+
+          if (destroyed) {
+            hit.add(enemy);
+            enemy.destroy();
+            spawnExplosion(entityManager, game, enemy.x, enemy.y, false);
+            game.onEnemyDestroyed('attack_quad');
+          }
+        } else if (isKamikazeQuad(enemy)) {
+          // KamikazeQuad has 1 HP — instant kill, small explosion.
+          hit.add(proj);
+          hit.add(enemy);
+          proj.destroy();
+          enemy.destroy();
+
+          spawnExplosion(entityManager, game, mx, my, false);
+          game.onEnemyDestroyed('kamikaze_quad');
         } else {
           // Standard intercept — both consumed.
           hit.add(proj);
@@ -325,6 +357,10 @@ export class CollisionSystem {
       if (isTransportPlane(enemy)) continue;
       // Paratroopers manage their own landing via state machine in paratrooper.js
       if (isParatrooper(enemy)) continue;
+      // AttackQuad and KamikazeQuad hover above terrain — their state machines
+      // handle terrain proximity; terrain collision would prematurely destroy them
+      if (isAttackQuad(enemy)) continue;
+      if (isKamikazeQuad(enemy)) continue;
       if (!collidesWithTerrain(enemy, terrain)) continue;
 
       hit.add(enemy);

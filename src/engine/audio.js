@@ -394,6 +394,26 @@ export class Audio {
   }
 
   /**
+   * Quadcopter motor buzz — 85Hz + 170Hz detuned square waves.
+   * Short burst (0.05s) to indicate firing or presence.
+   * @param {number} x — world x for stereo pan
+   */
+  playQuadBuzz(x) {
+    if (!this.audioCtx) return;
+    this._playBuffer(this._generateQuadBuzzBuffer(), 0, 1.0, panFromX(x));
+  }
+
+  /**
+   * Quick high-pitched crack for quad tracer shot (reuses vulkan shot pattern at higher pitch).
+   * @param {number} x — world x for stereo pan
+   */
+  playQuadTracerShot(x) {
+    if (!this.audioCtx) return;
+    // Vulkan shot at 60% volume (-4.4dB) and higher pitch (1.4x)
+    this._playBuffer(this.vulkanShotBuffer, randf(-7.0, -4.0), randf(1.2, 1.6), panFromX(x));
+  }
+
+  /**
    * Thunder — plays lightning.wav from assets/radio/.
    */
   playThunder() {
@@ -1093,6 +1113,39 @@ export class Audio {
     }
 
     applyLoopCrossfade(samples, LOOP_FADE_SAMPLES);
+    return this._createBuffer(samples, sampleRate);
+  }
+
+  // -- Quad buzz: 85Hz + 170Hz detuned square waves, 0.05s duration ----------
+  _generateQuadBuzzBuffer() {
+    const sampleRate = 22050;
+    const duration = 0.05;
+    const numSamples = Math.floor(sampleRate * duration);
+    const samples = new Float32Array(numSamples);
+
+    const TAU2 = 2 * Math.PI;
+
+    for (let i = 0; i < numSamples; i++) {
+      const t = i / sampleRate;
+      const progress = t / duration;
+
+      // Envelope: short burst with fade out
+      const env = Math.exp(-progress * 8);
+
+      // 85Hz pseudo-square wave (hard clip sine)
+      const s1 = Math.sin(TAU2 * 85.0 * t);
+      const sq1 = s1 > 0.3 ? 0.6 : (s1 < -0.3 ? -0.6 : s1 * 2.0);
+
+      // 170Hz detuned — slight frequency offset for buzz character
+      const s2 = Math.sin(TAU2 * 172.0 * t); // slightly detuned from 2x
+      const sq2 = s2 > 0.3 ? 0.35 : (s2 < -0.3 ? -0.35 : s2 * 1.17);
+
+      let val = (sq1 + sq2) * env * 0.4;
+      val = Math.tanh(val * 2.0) / Math.tanh(2.0);
+
+      samples[i] = val;
+    }
+
     return this._createBuffer(samples, sampleRate);
   }
 

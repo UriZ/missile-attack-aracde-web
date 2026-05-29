@@ -24,6 +24,8 @@ import { SuicideDrone } from './entities/suicide-drone.js';
 import { Nuke } from './entities/nuke.js';
 import { TransportPlane } from './entities/transport-plane.js';
 import { Paratrooper } from './entities/paratrooper.js';
+import { AttackQuad } from './entities/attack-quad.js';
+import { KamikazeQuad } from './entities/kamikaze-quad.js';
 import { Explosion } from './explosion.js';
 import { Crater } from './crater.js';
 import { DayNightCycle } from './day-night.js';
@@ -772,6 +774,8 @@ export class Game {
       case 'suicide_drone': this._spawnSuicideDrone(); break;
       case 'nuke': this._spawnNuke(); break;
       case 'transport_plane': this._spawnTransportPlane(); break;
+      case 'attack_quad': this._spawnAttackQuad(); break;
+      case 'kamikaze_quad': this._spawnKamikazeQuad(); break;
     }
   }
 
@@ -869,6 +873,44 @@ export class Game {
     this.entities.add(plane);
   }
 
+  _spawnAttackQuad() {
+    const side = Math.random() < 0.5 ? -60 : 2620;
+    const y = randf(150, 400);
+    const quad = new AttackQuad(side, y);
+    quad.hoverTargetX = randf(300, 2260);
+    quad.hoverTargetY = randf(200, 500);
+    // Set hover targets so the approach state has a destination
+    quad.hoverX = quad.hoverTargetX;
+    quad.hoverY = quad.hoverTargetY;
+    quad.terrain = this.terrain;
+    quad.getLaunchers = () => this.launchers.filter(l => l.alive);
+    quad.onSpawnProjectile = (tracer) => this.entities.add(tracer);
+    quad.onDeath = (x, y) => {
+      this.entities.add(new Explosion(x, y));
+      this.entities.add(new Crater(x, this.terrain ? this.terrain.getHeightAt(x) : y, 1.0));
+    };
+    this.entities.add(quad);
+  }
+
+  _spawnKamikazeQuad() {
+    const side = Math.random() < 0.5 ? -60 : 2620;
+    const y = randf(150, 400);
+    const quad = new KamikazeQuad(side, y);
+    quad.hoverTargetX = randf(300, 2260);
+    quad.hoverTargetY = randf(250, 550);
+    // Set hover targets so the approach state has a destination
+    quad.hoverX = quad.hoverTargetX;
+    quad.hoverY = quad.hoverTargetY;
+    quad._hoverDuration = randf(1.5, 3.0);
+    quad.terrain = this.terrain;
+    quad.getLaunchers = () => this.launchers.filter(l => l.alive);
+    quad.onDeath = (x, y) => {
+      this.entities.add(new Explosion(x, y));
+      this.entities.add(new Crater(x, this.terrain ? this.terrain.getHeightAt(x) : y, 1.5));
+    };
+    this.entities.add(quad);
+  }
+
   _onDroneBomb(x, y) {
     const bomb = new EnemyMissile(x, y);
     const targetX = x + randf(-30, 30);
@@ -880,7 +922,7 @@ export class Game {
   // ── Game events ────────────────────────────────────────────
 
   onEnemyDestroyed(type = 'normal') {
-    const points = { nuke: 5, transport_plane: 3, paratrooper: 2 };
+    const points = { nuke: 5, transport_plane: 3, paratrooper: 2, attack_quad: 3, kamikaze_quad: 2 };
     const earned = points[type] || 1;
     this.score += earned;
     this.waveScore += earned;
