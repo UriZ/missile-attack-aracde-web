@@ -48,12 +48,14 @@ export class Renderer {
 
   /**
    * Begin a new frame: clear canvas and set up the logical-to-physical transform
-   * including camera shake offset.
+   * including camera shake offset. Clips all rendering to the logical viewport
+   * so nothing bleeds into letterbox bars on non-16:9 aspect ratios.
    */
   beginFrame() {
     const ctx = this.ctx;
     const c = this.canvas;
 
+    // Reset to identity and clear the full physical canvas (including letterbox bars)
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, c.width, c.height);
 
@@ -65,6 +67,13 @@ export class Renderer {
       (this.offsetX + this.cameraOffsetX * this.scale) * devicePixelRatio,
       (this.offsetY + this.cameraOffsetY * this.scale) * devicePixelRatio
     );
+
+    // Clip to the logical viewport so entities at negative Y (or beyond LOGICAL_W/H)
+    // do not render into the letterbox bars on non-16:9 windows.
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(0, 0, Renderer.LOGICAL_W, Renderer.LOGICAL_H);
+    ctx.clip();
   }
 
   /**
@@ -81,9 +90,9 @@ export class Renderer {
     );
   }
 
-  /** End the current frame. */
+  /** End the current frame. Restores the clip region set by beginFrame(). */
   endFrame() {
-    // intentionally empty
+    this.ctx.restore();
   }
 
   // ── Drawing helpers ──────────────────────────────────────────
