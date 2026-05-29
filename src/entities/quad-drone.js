@@ -232,6 +232,13 @@ export class QuadDrone extends Entity {
 
     this.x += this.vx * dt;
     this.y += this.vy * dt;
+
+    // Continuous rotor buzz during approach — same timing as hover
+    this._buzzTimer -= dt;
+    if (this._buzzTimer <= 0) {
+      this._buzzTimer = 0.5;
+      this.audio?.playQuadBuzz(this.x);
+    }
   }
 
   _updateHover(dt) {

@@ -112,6 +112,7 @@ export class Audio {
     this.shieldDeflectBuffer = null;
     this.shieldNukeHitBuffer = null;
     this.shieldWarningBuffer = null;
+    this.quadBuzzBuffer = null;
 
     // Laser sounds
     this.laserWarmUpBuffer = null;
@@ -155,6 +156,9 @@ export class Audio {
     this.shieldDeflectBuffer = this._generateShieldDeflectBuffer();
     this.shieldNukeHitBuffer = this._generateShieldNukeHitBuffer();
     this.shieldWarningBuffer = this._generateShieldWarningBuffer();
+
+    // Drone buzz
+    this.quadBuzzBuffer = this._generateQuadBuzzBuffer();
 
     // Laser sounds
     this.laserWarmUpBuffer      = this._generateLaserWarmUpBuffer();
@@ -333,7 +337,7 @@ export class Audio {
    */
   playQuadBuzz(x) {
     if (!this.audioCtx) return;
-    this._playBuffer(this._generateQuadBuzzBuffer(), 0, 1.0, panFromX(x));
+    this._playBuffer(this.quadBuzzBuffer, 0, 1.0, panFromX(x));
   }
 
   /**
@@ -1147,7 +1151,7 @@ export class Audio {
       // Slight amplitude wobble for realism (rotor speed variation)
       const wobble = 1.0 + 0.06 * Math.sin(TAU2 * 3.5 * t);
 
-      let val = (sq1 + sq2 + s3) * env * wobble * 0.12;
+      let val = (sq1 + sq2 + s3) * env * wobble * 0.55;
       val = Math.tanh(val * 2.5) / Math.tanh(2.5);
 
       samples[i] = val;
