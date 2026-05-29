@@ -2,7 +2,11 @@
 
 **TLDR:** Missile defense arcade game in the browser. Intercept incoming threats, defend your base, survive the waves. Zero dependencies — just serve and play.
 
-## Quick Start
+## Play Online
+
+[**Play now on GitHub Pages**](https://uriz.github.io/missile-attack-aracde-web/)
+
+## Run Locally
 
 ```bash
 git clone https://github.com/UriZ/missile-attack-aracde-web.git
@@ -12,7 +16,7 @@ npx serve .
 
 Open [http://localhost:3000](http://localhost:3000) and click **Play**.
 
-That's it. No `npm install`, no build step, no dependencies required.
+No `npm install`, no build step, no dependencies required.
 
 
 ## Controls
