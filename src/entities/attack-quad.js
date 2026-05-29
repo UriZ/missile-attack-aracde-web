@@ -47,8 +47,6 @@ export class AttackQuad extends QuadDrone {
     this.pointValue = 3;
     this.enemyType  = 'attack_quad';
 
-    /** @type {function(QuadTracer): void|null} Callback to spawn a tracer entity */
-    this.onFireTracer = null;
   }
 
   /**
@@ -158,6 +156,7 @@ export class AttackQuad extends QuadDrone {
     if (!this.onSpawnProjectile) return;
     const tracer = QuadTracer.create(this.x, this.y, Math.cos(this._gimbalAngle), Math.sin(this._gimbalAngle), BURST_SPREAD);
     this.onSpawnProjectile(tracer);
+    this.audio?.playQuadTracerShot(this.x);
   }
 
   _aDying(dt) {
@@ -248,6 +247,26 @@ export class AttackQuad extends QuadDrone {
 
       ctx.restore();
     }
+  }
+
+  /**
+   * Override base _drawBody to omit the static camera gimbal.
+   * AttackQuad draws its own tracking gimbal via _drawGimbal() instead.
+   */
+  _drawBody(ctx) {
+    // 24x16px dark gray rect body
+    ctx.fillStyle = '#363C42';
+    ctx.fillRect(-12, -8, 24, 16);
+
+    // Body highlight
+    ctx.fillStyle = 'rgba(80,88,96,0.6)';
+    ctx.fillRect(-10, -7, 20, 5);
+
+    // Accent LEDs on body sides
+    ctx.fillStyle = this.accentColor;
+    ctx.beginPath(); ctx.arc(-10, 0, 2, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc( 10, 0, 2, 0, Math.PI * 2); ctx.fill();
+    // NOTE: no static gimbal here — _drawGimbal() renders the tracking one.
   }
 
   _drawGimbal(ctx) {

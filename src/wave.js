@@ -102,8 +102,8 @@ export class WaveSystem {
       ['drone',           2, 2],
       ['suicide_drone',   3, 2],
       ['nuke',            3, 1],
-      ['attack_quad',     3, 1.5],
-      ['kamikaze_quad',   3, 1.5],
+      ['attack_quad',     2, 1.5],
+      ['kamikaze_quad',   2, 1.5],
     ];
 
     // Build weighted pool — jitter thresholds by ±1 wave for variety

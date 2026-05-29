@@ -327,6 +327,26 @@ export class Audio {
   }
 
   /**
+   * Quadcopter motor buzz — 85Hz + 170Hz detuned square waves.
+   * Short burst (0.05s) to indicate firing or presence.
+   * @param {number} x — world x for stereo pan
+   */
+  playQuadBuzz(x) {
+    if (!this.audioCtx) return;
+    this._playBuffer(this._generateQuadBuzzBuffer(), 0, 1.0, panFromX(x));
+  }
+
+  /**
+   * Quick high-pitched crack for quad tracer shot (reuses vulkan shot pattern at higher pitch).
+   * @param {number} x — world x for stereo pan
+   */
+  playQuadTracerShot(x) {
+    if (!this.audioCtx) return;
+    // Vulkan shot at 60% volume (-4.4dB) and higher pitch (1.4x)
+    this._playBuffer(this.vulkanShotBuffer, randf(-7.0, -4.0), randf(1.2, 1.6), panFromX(x));
+  }
+
+  /**
    * Rising frequency sweep — laser warming up.
    * @param {number} x — world x for stereo pan
    */
@@ -391,26 +411,6 @@ export class Audio {
     source.start();
 
     return true;
-  }
-
-  /**
-   * Quadcopter motor buzz — 85Hz + 170Hz detuned square waves.
-   * Short burst (0.05s) to indicate firing or presence.
-   * @param {number} x — world x for stereo pan
-   */
-  playQuadBuzz(x) {
-    if (!this.audioCtx) return;
-    this._playBuffer(this._generateQuadBuzzBuffer(), 0, 1.0, panFromX(x));
-  }
-
-  /**
-   * Quick high-pitched crack for quad tracer shot (reuses vulkan shot pattern at higher pitch).
-   * @param {number} x — world x for stereo pan
-   */
-  playQuadTracerShot(x) {
-    if (!this.audioCtx) return;
-    // Vulkan shot at 60% volume (-4.4dB) and higher pitch (1.4x)
-    this._playBuffer(this.vulkanShotBuffer, randf(-7.0, -4.0), randf(1.2, 1.6), panFromX(x));
   }
 
   /**

@@ -170,8 +170,13 @@ export class KamikazeQuad extends QuadDrone {
     const d  = Math.sqrt(dx * dx + dy * dy);
 
     if (d < 5) {
-      // Hit — mark for collision system to handle
-      this.alive = false;
+      // Reached target — keep alive so collision section 3 can handle the impact.
+      // Setting alive=false here would remove the entity before collision runs,
+      // causing launchers to survive the hit. Stay at target position instead.
+      this.x = tx;
+      this.y = ty;
+      this.vx = 0;
+      this.vy = 0;
       return;
     }
 

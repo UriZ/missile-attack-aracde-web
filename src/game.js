@@ -246,6 +246,8 @@ export class Game {
           Nuke: 'nuke',
           TransportPlane: 'transport_plane',
           Paratrooper: 'paratrooper',
+          AttackQuad: 'attack_quad',
+          KamikazeQuad: 'kamikaze_quad',
         };
         this.onEnemyDestroyed(typeMap[typeName] || 'normal');
         this.shakeScreen(8);
@@ -885,6 +887,7 @@ export class Game {
     quad.terrain = this.terrain;
     quad.getLaunchers = () => this.launchers.filter(l => l.alive);
     quad.onSpawnProjectile = (tracer) => this.entities.add(tracer);
+    quad.audio = this.audio;
     quad.onDeath = (x, y) => {
       this.entities.add(new Explosion(x, y));
       this.entities.add(new Crater(x, this.terrain ? this.terrain.getHeightAt(x) : y, 1.0));
@@ -904,6 +907,7 @@ export class Game {
     quad._hoverDuration = randf(1.5, 3.0);
     quad.terrain = this.terrain;
     quad.getLaunchers = () => this.launchers.filter(l => l.alive);
+    quad.audio = this.audio;
     quad.onDeath = (x, y) => {
       this.entities.add(new Explosion(x, y));
       this.entities.add(new Crater(x, this.terrain ? this.terrain.getHeightAt(x) : y, 1.5));

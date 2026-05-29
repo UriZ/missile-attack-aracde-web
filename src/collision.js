@@ -498,6 +498,25 @@ export class CollisionSystem {
           spawnCrater(entityManager, ix, craterY, 3);
 
           game.shakeScreen(28);
+        } else if (isKamikazeQuad(enemy)) {
+          // KamikazeQuad body-slams the launcher — large explosion, moderate damage.
+          // No score awarded — enemy reaching the launcher is an enemy success.
+          spawnExplosion(entityManager, game, ix, iy, true);
+
+          terrain.damage(ix, iy, 80, 30);
+
+          spawnCrater(entityManager, ix, craterY, 2.5);
+
+          game.shakeScreen(22);
+        } else if (isQuadTracer(enemy)) {
+          // QuadTracer is a small projectile — small explosion, minimal terrain damage.
+          spawnExplosion(entityManager, game, ix, iy, false);
+
+          terrain.damage(ix, iy, 30, 10);
+
+          spawnCrater(entityManager, ix, craterY, 0.5);
+
+          game.shakeScreen(4);
         } else {
           // Standard enemy missile or drone.
           spawnExplosion(entityManager, game, ix, iy, true);

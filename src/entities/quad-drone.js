@@ -118,8 +118,11 @@ export class QuadDrone extends Entity {
     /** @type {function|null} Returns launcher entities */
     this.getLaunchers = null;
 
-    /** @type {function(number,number):void|null} Callback to spawn tracer at (x,y) toward target */
-    this.onFireTracer = null;
+    /** @type {import('../engine/audio.js').AudioEngine|null} Audio engine reference */
+    this.audio = null;
+
+    // Timer for periodic buzz sound in hover state
+    this._buzzTimer = 0;
   }
 
   /** Pick or update hover target above nearest launcher (or random). */
@@ -246,6 +249,13 @@ export class QuadDrone extends Entity {
 
     this.x += this.vx * dt;
     this.y += this.vy * dt;
+
+    // Periodic buzz sound while hovering
+    this._buzzTimer -= dt;
+    if (this._buzzTimer <= 0) {
+      this._buzzTimer = 0.5;
+      this.audio?.playQuadBuzz(this.x);
+    }
   }
 
   _updateDying(dt) {
