@@ -250,7 +250,7 @@ export class QuadDrone extends Entity {
     this.x += this.vx * dt;
     this.y += this.vy * dt;
 
-    // Periodic buzz sound while hovering
+    // Continuous rotor buzz — retrigger every 0.5s (buffer is 0.55s so they overlap)
     this._buzzTimer -= dt;
     if (this._buzzTimer <= 0) {
       this._buzzTimer = 0.5;

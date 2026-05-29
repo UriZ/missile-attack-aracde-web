@@ -1119,7 +1119,7 @@ export class Audio {
   // -- Quad buzz: 85Hz + 170Hz detuned square waves, 0.05s duration ----------
   _generateQuadBuzzBuffer() {
     const sampleRate = 22050;
-    const duration = 0.05;
+    const duration = 0.55;
     const numSamples = Math.floor(sampleRate * duration);
     const samples = new Float32Array(numSamples);
 
@@ -1127,21 +1127,28 @@ export class Audio {
 
     for (let i = 0; i < numSamples; i++) {
       const t = i / sampleRate;
-      const progress = t / duration;
 
-      // Envelope: short burst with fade out
-      const env = Math.exp(-progress * 8);
+      // Smooth envelope: fade in 0.02s, sustain, fade out 0.05s
+      const fadeIn = Math.min(1, t / 0.02);
+      const fadeOut = Math.min(1, (duration - t) / 0.05);
+      const env = fadeIn * fadeOut;
 
-      // 85Hz pseudo-square wave (hard clip sine)
+      // 85Hz pseudo-square wave — fundamental rotor tone
       const s1 = Math.sin(TAU2 * 85.0 * t);
-      const sq1 = s1 > 0.3 ? 0.6 : (s1 < -0.3 ? -0.6 : s1 * 2.0);
+      const sq1 = s1 > 0.3 ? 0.5 : (s1 < -0.3 ? -0.5 : s1 * 1.67);
 
-      // 170Hz detuned — slight frequency offset for buzz character
-      const s2 = Math.sin(TAU2 * 172.0 * t); // slightly detuned from 2x
-      const sq2 = s2 > 0.3 ? 0.35 : (s2 < -0.3 ? -0.35 : s2 * 1.17);
+      // 170Hz detuned — harmonic buzz character
+      const s2 = Math.sin(TAU2 * 172.0 * t);
+      const sq2 = s2 > 0.3 ? 0.3 : (s2 < -0.3 ? -0.3 : s2);
 
-      let val = (sq1 + sq2) * env * 0.4;
-      val = Math.tanh(val * 2.0) / Math.tanh(2.0);
+      // 340Hz upper harmonic — adds "angry wasp" edge
+      const s3 = Math.sin(TAU2 * 341.0 * t) * 0.15;
+
+      // Slight amplitude wobble for realism (rotor speed variation)
+      const wobble = 1.0 + 0.06 * Math.sin(TAU2 * 3.5 * t);
+
+      let val = (sq1 + sq2 + s3) * env * wobble * 0.12;
+      val = Math.tanh(val * 2.5) / Math.tanh(2.5);
 
       samples[i] = val;
     }
