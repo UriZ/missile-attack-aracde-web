@@ -134,8 +134,8 @@ create a force field shield to temporarily protect all my assets... have limited
 
 | # | Title | Status |
 |---|-------|--------|
-| #22 | Wave number duplicates during banner | Fixed, in QA |
-| #23 | Heat-seeker lock circle too small | Fixed, in QA |
+| ~~#22~~ | ~~Wave number duplicates during banner~~ | ~~Fixed~~ ✅ |
+| ~~#23~~ | ~~Heat-seeker lock circle too small~~ | ~~Fixed~~ ✅ |
 
 ---
 ### 19 nuke interceptor 
@@ -148,36 +148,25 @@ create a nuker interceptor - whihch allows you to shoot nukes at eney missiles1
 ### 21 switch vision mode
 - support two modes: night vision and thermal
 
-### 22 Enemy Quadcopter Drones
-**Status:** Planned | **GitHub:** #62
+### ~~22 Enemy Quadcopter Drones~~ ✅
+> Done (#62). Attack quad (3HP, tracer bursts, gimbal tracking) and kamikaze quad (dive attack). X-config arms, spinning rotors, hover bob/drift, spiral death animation. Buzz audio with 3-harmonic synthesis. Spawns from wave 2+.
 
-DJI Matrice-style quad drones as a new enemy type. Two variants:
-- **Attack quad**: hovers in place or slowly drifts, fires downward bursts at player assets (launchers, buildings). Has HP (takes 2-3 hits to destroy). Rotors spin visually.
-- **Kamikaze quad**: flies toward a target launcher/building and detonates on contact (like suicide drone but hovers and is slower, harder to hit due to small size and erratic movement)
-
-Visual inspiration: DJI Matrice 4 — compact body with 4 arms, spinning rotors with orange tips, camera/gimbal underneath, landing gear legs. Draw procedurally on canvas.
-
-Behavior:
-- Spawn from screen edges (left/right), fly to a hover position
-- Attack variant: hover + slight bob, fire small red tracers downward every 2-3s
-- Kamikaze variant: hover briefly then dive toward nearest alive launcher
-- Both have slight lateral drift and vertical bob for realistic hover feel
-- Destroyed: sparks + smoke trail as it spirals down, small explosion on ground impact
-- Points: attack=3, kamikaze=2
-- Wave budget: attack=4, kamikaze=3
-- Spawns from wave 3+
-
-## GitHub Issue Tracker1
+## GitHub Issue Tracker
 
 | # | Title | State | Labels |
 |---|-------|-------|--------|
-| #24 | Paratroopers | open | qa |
-| #23 | Lock circle too small | open | bug, qa |
-| #22 | Wave number duplicate | open | bug, qa |
-| #21 | Nuke visual redesign | open | qa |
-| #20 | Super missile split + parachute | open | qa |
+| #67 | Hunter drone weapon fixes | open | developer |
+| #62 | ~~Quad drones~~ | closed | ~~enhancement~~ |
+| #59-61 | Upgrade/shop system | open | developer (on feature/shop-ui) |
+| #56 | Space biome | open | developer |
+| #55 | Upgrade system umbrella | open | ui-design |
+| #54 | Laser HUD wrong color | open | bug |
+| #53 | Vision modes | open | qa |
+| #52 | Barracks glow leak | open | bug |
+| #51 | RPG score bug | open | bug |
+| #50 | Tracer X coordinate | open | bug |
+| #48 | Soldiers feature | open | enhancement |
+| #46 | Startup music persists | open | bug |
+| #45 | Audio silent on fresh install | open | bug |
+| #24 | ~~Paratroopers~~ | closed | ~~qa~~ |
 | #19 | UI Overhaul | open | qa |
-| #17 | Target acquired sound + cursor | open | enhancement |
-| #16 | Dynamic scenery/daytime | open | architect |
-| #14 | Radio chatter | open | qa |
-| #12 | Heat-seeker tuning | open | qa |
