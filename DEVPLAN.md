@@ -142,8 +142,8 @@ create a force field shield to temporarily protect all my assets... have limited
 create a nuker interceptor - whihch allows you to shoot nukes at eney missiles1
 
 
-### 20 lazer interceptor
-- implement an intereceptor that shoots lazer beams... it takes a second to worm up...
+### ~~20 lazer interceptor~~ ✅
+> Done. Laser beam weapon with warm-up delay implemented.
 
 ### 21 switch vision mode
 - support two modes: night vision and thermal
