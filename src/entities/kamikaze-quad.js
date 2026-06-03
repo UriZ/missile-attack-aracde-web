@@ -110,6 +110,13 @@ export class KamikazeQuad extends QuadDrone {
     this.vy = lerp(this.vy, ny * speed, 4 * dt);
     this.x += this.vx * dt;
     this.y += this.vy * dt;
+
+    // Rotor buzz during approach
+    this._buzzTimer -= dt;
+    if (this._buzzTimer <= 0) {
+      this._buzzTimer = 0.5;
+      this.audio?.playQuadBuzz(this.x);
+    }
   }
 
   _kHover(dt) {
@@ -121,6 +128,13 @@ export class KamikazeQuad extends QuadDrone {
     this.vy = lerp(this.vy, (ty - this.y) * 3.0, 3 * dt);
     this.x += this.vx * dt;
     this.y += this.vy * dt;
+
+    // Rotor buzz during hover
+    this._buzzTimer -= dt;
+    if (this._buzzTimer <= 0) {
+      this._buzzTimer = 0.5;
+      this.audio?.playQuadBuzz(this.x);
+    }
 
     this._hoverTimer += dt;
     if (this._hoverTimer >= this._hoverDuration) {
