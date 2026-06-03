@@ -676,7 +676,6 @@ export class UI {
     if (slot.type === 'bike' && isAlive && launcher) {
       // Cooldown indicator (top-right corner of card)
       const cd = launcher._fireCooldownTimer || 0;
-      const maxCd = launcher.fireCooldown || 1.2;
       if (cd > 0) {
         ctx.font = 'bold 18px monospace';
         ctx.textAlign = 'right';
