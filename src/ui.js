@@ -524,10 +524,8 @@ export class UI {
         return `LASER — Hold click to fire directed energy beam`;
       }
       case 'bike': {
-        const ammo = sel.ammo !== undefined ? sel.ammo : 6;
         const cd = sel._fireCooldownTimer > 0 ? ` (reload ${sel._fireCooldownTimer.toFixed(1)}s)` : '';
-        if (ammo === 0) return `BIKE — OUT OF AMMO — next wave restocks`;
-        return `BIKE — Click to fire missile   ammo:[${ammo}]${cd}   ← → to drive`;
+        return `BIKE — Click to fire missile${cd}   ← → to drive`;
       }
       default:
         return '';
@@ -674,26 +672,23 @@ export class UI {
       ctx.fillText(`[${stock}]`, x + w - 10, y + h - 8);
     }
 
-    // Ammo count for BIKE launcher
+    // Cooldown + speed bar for BIKE launcher
     if (slot.type === 'bike' && isAlive && launcher) {
-      const ammo = launcher.ammo !== undefined ? launcher.ammo : 6;
-      const maxAmmo = launcher.maxAmmo !== undefined ? launcher.maxAmmo : 6;
-      ctx.font = 'bold 18px monospace';
-      ctx.textAlign = 'right';
-      ctx.textBaseline = 'bottom';
-      if (ammo === 0) {
-        ctx.fillStyle = 'rgba(255,50,50,0.9)';
-        ctx.fillText('RELOAD', x + w - 10, y + h - 8);
+      // Cooldown indicator (top-right corner of card)
+      const cd = launcher._fireCooldownTimer || 0;
+      const maxCd = launcher.fireCooldown || 1.2;
+      if (cd > 0) {
+        ctx.font = 'bold 18px monospace';
+        ctx.textAlign = 'right';
+        ctx.textBaseline = 'bottom';
+        ctx.fillStyle = 'rgba(255,200,50,0.9)';
+        ctx.fillText(`${cd.toFixed(1)}s`, x + w - 10, y + h - 8);
       } else {
-        const ratio = ammo / maxAmmo;
-        if (ratio > 0.5) {
-          ctx.fillStyle = 'rgba(0,255,136,0.85)';
-        } else if (ratio > 0.16) {
-          ctx.fillStyle = 'rgba(255,200,50,0.9)';
-        } else {
-          ctx.fillStyle = 'rgba(255,50,50,0.9)';
-        }
-        ctx.fillText(`${ammo}x`, x + w - 10, y + h - 8);
+        ctx.font = 'bold 18px monospace';
+        ctx.textAlign = 'right';
+        ctx.textBaseline = 'bottom';
+        ctx.fillStyle = 'rgba(0,255,136,0.85)';
+        ctx.fillText('READY', x + w - 10, y + h - 8);
       }
       // Speed indicator bar
       const speed = launcher.currentSpeed || 0;

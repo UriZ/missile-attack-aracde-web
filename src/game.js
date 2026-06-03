@@ -155,9 +155,7 @@ export class Game {
       const earned = this.waveScore + Math.floor(this.waveScore * 0.25);
       this.cash += earned;
       this.waveScore = 0;
-      // Replenish bike ammo between waves
-      const bikeL = this.launchers.find(l => l.type === 'bike');
-      if (bikeL && bikeL.alive) bikeL.replenishAmmo();
+
     };
 
     // Start the loop

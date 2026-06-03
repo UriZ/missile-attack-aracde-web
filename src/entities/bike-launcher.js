@@ -35,8 +35,6 @@ const MAX_SLOPE_ANGLE = 0.30; // radians (~17°) — clamp to prevent flipping u
 const FRONT_WHEEL_X = 32;
 const REAR_WHEEL_X = -28;
 
-// Ammo
-const MAX_AMMO = 6;
 const FIRE_COOLDOWN = 1.2; // seconds
 
 // Glow polygons (wider than bike body)
@@ -55,9 +53,7 @@ export class BikeLauncher extends TruckLauncher {
     // Override movement constants
     this._bikeMode = true; // flag to differentiate in update
 
-    // Ammo / cooldown
-    this.ammo = MAX_AMMO;
-    this.maxAmmo = MAX_AMMO;
+    // Cooldown only — ammo is unlimited
     this._fireCooldownTimer = 0;
     this.fireCooldown = FIRE_COOLDOWN;
 
@@ -90,10 +86,10 @@ export class BikeLauncher extends TruckLauncher {
   }
 
   /**
-   * @returns {boolean} true if the bike can fire
+   * @returns {boolean} true if the bike can fire (cooldown only — ammo is unlimited)
    */
   canFire() {
-    return this._fireCooldownTimer <= 0 && this.ammo > 0;
+    return this._fireCooldownTimer <= 0;
   }
 
   /**
@@ -101,15 +97,7 @@ export class BikeLauncher extends TruckLauncher {
    */
   onFired() {
     this._fireCooldownTimer = this.fireCooldown;
-    this.ammo = Math.max(0, this.ammo - 1);
     this._flashTimer = this._flashDuration;
-  }
-
-  /**
-   * Replenish ammo between waves.
-   */
-  replenishAmmo() {
-    this.ammo = this.maxAmmo;
   }
 
   /** @override Stop moving when destroyed */
