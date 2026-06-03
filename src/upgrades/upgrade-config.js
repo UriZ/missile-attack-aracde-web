@@ -339,4 +339,48 @@ export const UPGRADE_CONFIG = {
     ],
   },
 
+  // ─── Bike of Doom ─────────────────────────────────────────────────────────────
+  bike: {
+    id: 'bike',
+    label: 'DOOM BIKE',
+    upgrades: [
+      {
+        id: 'bike_turbo',
+        name: 'Nitro Boost',
+        description: '+50% top speed',
+        cost: 300,
+        tier: 1,
+        prereqs: null,
+        effects: [
+          { weapon: 'bike', stat: 'moveSpeed', op: 'multiply', value: 1.5 },
+        ],
+        icon: 'speed',
+      },
+      {
+        id: 'bike_expanded_magazine',
+        name: 'Expanded Magazine',
+        description: '+4 ammo capacity per wave',
+        cost: 250,
+        tier: 1,
+        prereqs: null,
+        effects: [
+          { weapon: 'bike', stat: 'maxAmmo', op: 'add', value: 4 },
+        ],
+        icon: 'ammo',
+      },
+      {
+        id: 'bike_rapid_reload',
+        name: 'Rapid Reload',
+        description: '-40% fire cooldown',
+        cost: 400,
+        tier: 2,
+        prereqs: ['bike_expanded_magazine'],
+        effects: [
+          { weapon: 'bike', stat: 'fireCooldown', op: 'multiply', value: 0.6 },
+        ],
+        icon: 'speed',
+      },
+    ],
+  },
+
 };

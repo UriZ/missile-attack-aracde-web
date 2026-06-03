@@ -30,6 +30,7 @@ const LAUNCHER_SLOTS = [
   { key: '4', type: 'vulkan',     label: 'VULKAN'  },
   { key: '5', type: 'drone_pad',  label: 'HUNTER'  },
   { key: '6', type: 'laser',      label: 'LASER'   },
+  { key: '7', type: 'bike',       label: 'BIKE'    },
 ];
 
 // Nuke warning duration
@@ -522,6 +523,12 @@ export class UI {
         if (state === 'firing')  return `LASER — FIRING   energy:${energyPct}%`;
         return `LASER — Hold click to fire directed energy beam`;
       }
+      case 'bike': {
+        const ammo = sel.ammo !== undefined ? sel.ammo : 6;
+        const cd = sel._fireCooldownTimer > 0 ? ` (reload ${sel._fireCooldownTimer.toFixed(1)}s)` : '';
+        if (ammo === 0) return `BIKE — OUT OF AMMO — next wave restocks`;
+        return `BIKE — Click to fire missile   ammo:[${ammo}]${cd}   ← → to drive`;
+      }
       default:
         return '';
     }
@@ -665,6 +672,57 @@ export class UI {
       ctx.textBaseline = 'bottom';
       ctx.fillStyle = stock > 0 ? 'rgba(0,255,136,0.85)' : 'rgba(255,50,50,0.9)';
       ctx.fillText(`[${stock}]`, x + w - 10, y + h - 8);
+    }
+
+    // Ammo count for BIKE launcher
+    if (slot.type === 'bike' && isAlive && launcher) {
+      const ammo = launcher.ammo !== undefined ? launcher.ammo : 6;
+      const maxAmmo = launcher.maxAmmo !== undefined ? launcher.maxAmmo : 6;
+      ctx.font = 'bold 18px monospace';
+      ctx.textAlign = 'right';
+      ctx.textBaseline = 'bottom';
+      if (ammo === 0) {
+        ctx.fillStyle = 'rgba(255,50,50,0.9)';
+        ctx.fillText('RELOAD', x + w - 10, y + h - 8);
+      } else {
+        const ratio = ammo / maxAmmo;
+        if (ratio > 0.5) {
+          ctx.fillStyle = 'rgba(0,255,136,0.85)';
+        } else if (ratio > 0.16) {
+          ctx.fillStyle = 'rgba(255,200,50,0.9)';
+        } else {
+          ctx.fillStyle = 'rgba(255,50,50,0.9)';
+        }
+        ctx.fillText(`${ammo}x`, x + w - 10, y + h - 8);
+      }
+      // Speed indicator bar
+      const speed = launcher.currentSpeed || 0;
+      const maxSpeed = launcher.moveSpeed || 280;
+      const speedRatio = Math.min(1, speed / maxSpeed);
+      const barX = x + 8;
+      const barY = y + h - 18;
+      const barW = w - 16;
+      const barH = 6;
+      // Background
+      ctx.fillStyle = 'rgba(0,0,0,0.4)';
+      _roundRect(ctx, barX, barY, barW, barH, 3);
+      ctx.fill();
+      // Fill
+      if (speedRatio > 0) {
+        const spdGrad = ctx.createLinearGradient(barX, barY, barX + barW * speedRatio, barY);
+        spdGrad.addColorStop(0, 'rgba(60,80,50,0.8)');
+        spdGrad.addColorStop(0.5, 'rgba(200,160,20,0.9)');
+        spdGrad.addColorStop(1, 'rgba(255,80,20,0.95)');
+        ctx.fillStyle = spdGrad;
+        _roundRect(ctx, barX, barY, barW * speedRatio, barH, 3);
+        ctx.fill();
+      }
+      // SPD label
+      ctx.font = '12px monospace';
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'middle';
+      ctx.fillStyle = 'rgba(150,160,140,0.7)';
+      ctx.fillText('SPD', barX + 2, barY + barH / 2);
     }
 
     ctx.restore();

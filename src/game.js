@@ -12,6 +12,7 @@ import { HeatSeekerLauncher } from './entities/heat-seeking-launcher.js';
 import { TruckLauncher } from './entities/truck-launcher.js';
 import { VulkanCannon } from './entities/vulkan-cannon.js';
 import { LaserLauncher } from './entities/laser-launcher.js';
+import { BikeLauncher } from './entities/bike-launcher.js';
 import { DronePad } from './entities/drone-pad.js';
 import { HunterDrone } from './entities/hunter-drone.js';
 import { Missile } from './entities/missile.js';
@@ -42,6 +43,7 @@ const LAUNCHER_POSITIONS = [
   { x: 1900, y: 1220, Class: VulkanCannon },
   { x: 2200, y: 1220, Class: DronePad },
   { x: 2450, y: 1220, Class: LaserLauncher },
+  { x: 1200, y: 1220, Class: BikeLauncher },
 ];
 
 const CROSSHAIR_RADIUS = 90;
@@ -153,6 +155,9 @@ export class Game {
       const earned = this.waveScore + Math.floor(this.waveScore * 0.25);
       this.cash += earned;
       this.waveScore = 0;
+      // Replenish bike ammo between waves
+      const bikeL = this.launchers.find(l => l.type === 'bike');
+      if (bikeL && bikeL.alive) bikeL.replenishAmmo();
     };
 
     // Start the loop
@@ -211,6 +216,13 @@ export class Game {
     if (truckLauncher) {
       truckLauncher.terrain = this.terrain;
       truckLauncher._otherLaunchers = this.launchers;
+    }
+
+    // Inject terrain into the bike launcher
+    const bikeLauncher = this.launchers.find(l => l.type === 'bike');
+    if (bikeLauncher) {
+      bikeLauncher.terrain = this.terrain;
+      bikeLauncher._otherLaunchers = this.launchers;
     }
 
     // Wire vulkan fire callback
@@ -339,8 +351,8 @@ export class Game {
       () => this.entities.getGroup('enemy_missiles').length);
     this.waveNumber = this.waves.getCurrentWave();
 
-    // Keyboard launcher selection (1-6)
-    for (let i = 0; i < 6; i++) {
+    // Keyboard launcher selection (1-7)
+    for (let i = 0; i < this.launchers.length; i++) {
       if (this.input.wasKeyPressed(String(i + 1))) {
         this._selectLauncher(i);
       }
@@ -361,14 +373,15 @@ export class Game {
       this.shieldCooldown = 15;
     }
 
-    // Truck movement via arrow keys (only when truck is selected)
-    if (this.selectedLauncher && this.selectedLauncher.type === 'truck' && this.selectedLauncher.alive) {
+    // Truck / Bike movement via arrow keys (only when the mobile launcher is selected)
+    const selMobile = this.selectedLauncher;
+    if (selMobile && (selMobile.type === 'truck' || selMobile.type === 'bike') && selMobile.alive) {
       if (this.input.arrowLeft) {
-        this.selectedLauncher.moveDirection(-1);
+        selMobile.moveDirection(-1);
       } else if (this.input.arrowRight) {
-        this.selectedLauncher.moveDirection(1);
+        selMobile.moveDirection(1);
       } else {
-        this.selectedLauncher.moveDirection(0);
+        selMobile.moveDirection(0);
       }
     }
 
@@ -640,6 +653,11 @@ export class Game {
     } else if (sel.type === 'drone_pad') {
       if (this.input.mouseJustPressed) {
         this._deployHunterDrone(sel);
+      }
+    } else if (sel.type === 'bike') {
+      if (this.input.mouseJustPressed && sel.canFire()) {
+        this._fireMissile(sel);
+        sel.onFired();
       }
     } else {
       if (this.input.mouseJustPressed) {
