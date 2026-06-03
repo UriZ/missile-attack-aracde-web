@@ -20,11 +20,16 @@ const BIKE_MAX_X = 2480;
 const BIKE_WHEEL_RAD_PER_PX = 1 / 8;
 
 // Spring-damper constants for bounce physics
-const SPRING_K = 2800;    // stiffness
-const DAMPER_C = 120;     // damping
+// Tuned for overdamped response — no oscillation on flat terrain.
+// Critical damping: C = 2*sqrt(K*M). With K=280, M=1: critical C≈33.5.
+// We use C=80 (overdamped) so the bike settles without oscillating.
+const SPRING_K = 280;     // stiffness (was 2800 — 10x reduction eliminates constant oscillation)
+const DAMPER_C = 80;      // damping (overdamped: C > 2*sqrt(K) ≈ 33.5)
 const BIKE_MASS = 1.0;
 const GRAVITY = 400;       // px/s^2
-const REST_OFFSET = -8;    // suspension rest height above ground
+const REST_OFFSET = 0;     // bike sits at ground level (was -8, caused floor-clamp bounce loop)
+const SPRING_DEADZONE = 3; // px — don't apply spring force inside this range (eliminates micro-bounce)
+const MAX_SLOPE_ANGLE = 0.30; // radians (~17°) — clamp to prevent flipping upside-down
 
 // Wheel contact point X offsets from bike center
 const FRONT_WHEEL_X = 32;
@@ -164,29 +169,43 @@ export class BikeLauncher extends TruckLauncher {
       const groundAvg = (groundFront + groundRear) / 2;
       const targetY = groundAvg + REST_OFFSET;
 
-      // Spring force toward target
-      const springF = SPRING_K * (targetY - this.y);
-      // Damper force opposing velocity
-      const damperF = -DAMPER_C * this._vy;
-      // Net vertical acceleration
-      const ay = GRAVITY + (springF + damperF) / BIKE_MASS;
+      // Displacement from rest position
+      const displacement = targetY - this.y;
 
-      this._vy += ay * dt;
-      this.y += this._vy * dt;
-
-      // Hard floor clamp — don't clip through terrain
-      if (this.y > groundAvg) {
-        this.y = groundAvg;
-        this._vy = Math.min(this._vy, 0);
+      if (Math.abs(displacement) <= SPRING_DEADZONE && Math.abs(this._vy) < 20) {
+        // Within deadzone on flat/near-flat ground — snap directly to ground and kill velocity.
+        // This prevents micro-oscillation on flat terrain.
+        this.y = targetY;
+        this._vy = 0;
         this._airborne = false;
       } else {
-        this._airborne = this.y < groundAvg - 4;
+        // Apply spring-damper physics only when meaningfully displaced or airborne.
+        // Spring force toward target (deadzone stripped — full force outside deadzone)
+        const springF = SPRING_K * displacement;
+        // Damper force opposing velocity
+        const damperF = -DAMPER_C * this._vy;
+        // Net vertical acceleration (gravity pulls down, spring+damper correct position)
+        const ay = GRAVITY + (springF + damperF) / BIKE_MASS;
+
+        this._vy += ay * dt;
+        this.y += this._vy * dt;
+
+        // Hard floor clamp — don't clip through terrain
+        if (this.y >= groundAvg) {
+          this.y = groundAvg;
+          // Absorb downward velocity (inelastic landing — no rebound)
+          this._vy = 0;
+          this._airborne = false;
+        } else {
+          this._airborne = this.y < groundAvg - 4;
+        }
       }
 
-      // Slope tilt from two wheel contact points
-      const dir2 = this.facingRight ? 1 : -1;
-      const slopeAngle = Math.atan2(groundFront - groundRear, (FRONT_WHEEL_X - REAR_WHEEL_X) * dir2);
-      this._slopeAngle += (slopeAngle - this._slopeAngle) * Math.min(1, 8 * dt);
+      // Slope tilt from two wheel contact points.
+      // Clamped to ±MAX_SLOPE_ANGLE to prevent the bike from flipping upside-down.
+      const rawSlope = Math.atan2(groundFront - groundRear, (FRONT_WHEEL_X - REAR_WHEEL_X) * dir);
+      const clampedSlope = Math.max(-MAX_SLOPE_ANGLE, Math.min(MAX_SLOPE_ANGLE, rawSlope));
+      this._slopeAngle += (clampedSlope - this._slopeAngle) * Math.min(1, 8 * dt);
     }
 
     // ── Dust particles (only when not airborne) ──
