@@ -260,9 +260,9 @@ export class Paratrooper extends Entity {
         this.onDetonate(this.x, this.y);
       }
 
-      // Destroy the target launcher
+      // Destroy the target launcher via takeDamage so the HP system is always used
       if (this._runTarget && this._runTarget.alive) {
-        this._runTarget.destroy();
+        this._runTarget.takeDamage(1.0);
       }
 
       this.alive = false;

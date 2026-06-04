@@ -133,6 +133,10 @@ export class Game {
       // Stop terrain recovery once the new wave begins — craters should stick
       // during active combat.
       if (this.terrain) this.terrain.recovering = false;
+      // Stop launcher HP recovery — enemies are spawning now
+      for (const launcher of this.launchers) {
+        launcher._recovering = false;
+      }
       // Advance day/night cycle to target tod for this wave
       this.dayNight.setWave(wave);
       // Stormy biome: ensure DayNight does NOT draw its own 200 rain drops,
@@ -147,6 +151,12 @@ export class Game {
       this.ui.showWaveBanner(`WAVE ${wave} CLEAR`, rgba(0.2, 0.9, 0.3));
       // Begin gradual terrain healing during the inter-wave break.
       if (this.terrain) this.terrain.recovering = true;
+      // Begin HP recovery for all damaged (but alive) launchers
+      for (const launcher of this.launchers) {
+        if (launcher.alive) {
+          launcher._recovering = true;
+        }
+      }
       // Every 5 waves grant +1 shield charge
       if (wave % 5 === 0) {
         this.shieldCharges++;
@@ -155,7 +165,6 @@ export class Game {
       const earned = this.waveScore + Math.floor(this.waveScore * 0.25);
       this.cash += earned;
       this.waveScore = 0;
-
     };
 
     // Start the loop

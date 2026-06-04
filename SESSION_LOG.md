@@ -855,3 +855,22 @@ Fixes applied:
 **[architect-scenery → Team Lead] — COMPLETED**
 - **Agent TLDR**: Designed complete day/night cycle system. New `DayNightCycle` class in `src/day-night.js` as single source of truth. Wave-driven tod (8 waves = 1 full cycle). 8 color keyframes with interpolation for sky, ground, grass, mountains, haze. Stars (180 twinkling), sun/moon arcs, 2-layer scrolling clouds, optional weather (rain/fog at 20% chance from wave 3+). Terrain offscreen redraws guarded by delta check. Mountain closures need refactor to query dynamic colors. Building windows adapt (mostly lit at night, few lit at day).
 - **Improvement Insights**: Architect suggested documenting terrain's pre-bake pattern for closures — added to game-architect.md rather than CLAUDE.md per user preference for minimal CLAUDE.md.
+
+---
+
+## Iteration N: Launcher HP System (#77)
+
+### Phase 1: Developer Implementation
+
+**[Team Lead → senior-game-developer "dev-launcher-hp"]**
+- **Agent type**: `senior-game-developer`
+- **Task**: Implement HP system for launchers as infrastructure for Shock Blast (#76)
+- **GitHub issues**: #77
+
+**[dev-launcher-hp → Team Lead] — COMPLETED**
+- **Agent TLDR**: Implemented HP system across 4 files. (1) `src/entities/launcher.js`: Added `hp` (1.0), `maxHp` (1.0), hit-flash timer (0.15s), hit-shake amplitude with exponential decay, between-wave `_recovering` flag, damage particle arrays. `takeDamage(amount)` reduces HP, triggers flash/shake, calls `destroy()` when HP reaches 0, returns bool. `healHp(amount)` clamps to maxHp. `_updateDamageParticles(dt)` spawns sparks (HP < 0.7) and smoke wisps (HP < 0.4), advances/removes expired particles. `_drawDamageOverlay(ctx, halfW, halfH)` helper for subclasses: draws particles, red tint at HP < 0.4, white hit-flash. (2) `src/collision.js`: Replaced `launcher.destroy()` with `launcher.takeDamage(1.0)` at lines 444 and 475 (direct hit and nuke area damage). (3) `src/entities/paratrooper.js`: Replaced `this._runTarget.destroy()` with `this._runTarget.takeDamage(1.0)` so the HP system is always the path for launcher death. (4) `src/game.js`: `onWaveStart` stops recovery (`launcher._recovering = false`), `onWaveComplete` starts recovery for all alive launchers (`launcher._recovering = true`). Recovery rate 0.15 HP/s in `update()`. All existing instant-kill behavior is preserved — `takeDamage(1.0)` with `hp=1.0` hits exactly 0, same result as `destroy()`.
+
+## Improvement Insights
+- **[senior-game-developer.md]**: Add note that `_drawDamageOverlay` is opt-in for subclasses — the base class only provides the helper; subclasses must call it themselves inside their `draw()` before the final `ctx.restore()`. Without a documented convention, the feature may appear "missing" in QA if overlays aren't wired up.
+- **[CLAUDE.md]**: Document that paratrooper.js has a direct `launcher.destroy()` call in `_updateAttacking()` — any system that intercepts launcher death needs to patch this too.
+- **[workflow]**: Issue #77 task description could have listed all call sites that destroy launchers (collision.js section 3, nuke area damage, paratrooper.js) so developers don't need to grep for them manually.

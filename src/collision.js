@@ -441,7 +441,7 @@ export class CollisionSystem {
         hit.add(enemy);
         hit.add(launcher);
         enemy.destroy();
-        launcher.destroy();
+        launcher.takeDamage(1.0);
 
         const ix = launcher.x;
         const iy = launcher.y;
@@ -472,7 +472,7 @@ export class CollisionSystem {
             const ndy = nearby.y - iy;
             if (ndx * ndx + ndy * ndy <= NUKE_AREA_RADIUS * NUKE_AREA_RADIUS) {
               hit.add(nearby);
-              nearby.destroy();
+              nearby.takeDamage(1.0);
               spawnExplosion(entityManager, game, nearby.x, nearby.y, true);
             }
           }
