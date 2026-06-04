@@ -316,10 +316,12 @@ export class BikeLauncher extends TruckLauncher {
     }
 
     // ── Layers 4–19: Bike body in local space ──
+    // Bike body is drawn facing RIGHT by default (positive X = forward).
+    // Flip horizontally only when facing left.
     ctx.save();
     ctx.translate(worldX, worldY);
     ctx.rotate(this._slopeAngle);
-    if (this.facingRight) {
+    if (!this.facingRight) {
       ctx.scale(-1, 1);
     }
 
@@ -332,7 +334,7 @@ export class BikeLauncher extends TruckLauncher {
       ctx.shadowBlur = 0;
     }
 
-    // ── Layer 5: Rear wheel ──
+    // ── Layer 5: Front wheel (positive X = forward by default) ──
     this._drawWheel(ctx, 28, 0, 12);
 
     // ── Layer 6: Swingarm ──
@@ -479,7 +481,7 @@ export class BikeLauncher extends TruckLauncher {
     ctx.moveTo(12, -16); ctx.lineTo(28, -8); ctx.stroke();
     ctx.restore();
 
-    // ── Layer 14: Front wheel ──
+    // ── Layer 14: Rear wheel (negative X = rear by default) ──
     this._drawWheel(ctx, -32, 0, 11);
 
     // ── Layer 15: Seat pad ──
