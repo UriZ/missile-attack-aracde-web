@@ -86,6 +86,23 @@ export class BikeLauncher extends TruckLauncher {
   }
 
   /**
+   * Override: return world-space position of the rack mouth.
+   * The rack mouth is drawn at local coords (-28, -44) in the bike's body space
+   * (before slope rotation). The x sign flips with facingRight due to scale(-1,1).
+   * @returns {{ x: number, y: number }}
+   */
+  getLaunchPosition() {
+    const localX = this.facingRight ? 28 : -28;
+    const localY = -44;
+    const s = Math.sin(this._slopeAngle || 0);
+    const c = Math.cos(this._slopeAngle || 0);
+    return {
+      x: this.x + localX * c - localY * s,
+      y: this.y + localX * s + localY * c,
+    };
+  }
+
+  /**
    * @returns {boolean} true if the bike can fire (cooldown only — ammo is unlimited)
    */
   canFire() {
