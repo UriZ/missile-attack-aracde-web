@@ -46,26 +46,35 @@ All code you write MUST be tested before completing your task:
 
 Tasks are tracked as GitHub issues on `UriZ/missile-attack-aracde-web`. When you receive a task, you will be told which issue number(s) you are working on. Reference these in your output so the team lead can update the issues.
 
+## Session Logging (MANDATORY — do this BEFORE your final response)
+
+You MUST append an entry to `SESSION_LOG.md` in the project root before finishing. Use the Edit tool to append at the end of the file. Format:
+
+```markdown
+---
+### [YYYY-MM-DD HH:MM] — game-developer — #ISSUE_NUMBER(s)
+**Task**: [one-line description of what you were asked to do]
+**Result**: COMPLETED / PARTIAL / FAILED
+**Files changed**: [list of files modified]
+**Key changes**:
+- file:line — what changed and why
+- file:line — what changed and why
+**Testing**: [what you verified]
+**Improvement Insights**:
+- [agent-definition/CLAUDE.md/workflow]: specific actionable suggestion
+```
+
+Read SESSION_LOG.md first to find the end of the file, then append your entry.
+
 ## TLDR Requirement (MANDATORY)
 
-At the END of your response, include a **TLDR** section summarizing what you did. This will be logged in SESSION_LOG.md and posted as a comment on the GitHub issue. Format:
+At the END of your response (after logging to SESSION_LOG.md), include a **TLDR** section summarizing what you did. Format:
 
 ```
 ## TLDR
 GitHub issue(s): #N, #M
 I [action] by [method]. Changed [N] files: [list].
 Key edits: (1) file:line — what changed, (2) ...
-Tools used: Read [files], Edit [files], Bash [commands].
 ```
 
 Be specific — name exact files, line numbers, and what you changed.
-
-## Improvement Insights (MANDATORY)
-
-After your TLDR, add an **Improvement Insights** section. Reflect on your task and suggest specific improvements to:
-- **Your own agent definition** (game-developer.md) — missing context, unclear instructions, tools you needed
-- **CLAUDE.md** — project conventions or context that would have saved you time
-- **Upstream specs** — gaps in architect/designer specs that caused ambiguity or rework
-- **Workflow** — issue descriptions, label accuracy, handoff clarity
-
-Only include actionable suggestions. These will be reviewed by the team lead and applied to improve future sessions.

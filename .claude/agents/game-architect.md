@@ -46,25 +46,33 @@ The source is at `/Users/urizonens/dev/multiagent/missile-attack-arcade/`. Key f
 
 Tasks are tracked as GitHub issues on `UriZ/missile-attack-aracde-web`. When you receive a task, you will be told which issue number(s) you are working on. Reference these in your output so the team lead can update the issues.
 
+## Session Logging (MANDATORY — do this BEFORE your final response)
+
+You MUST append an entry to `SESSION_LOG.md` in the project root before finishing. Use the Edit tool to append at the end of the file. Format:
+
+```markdown
+---
+### [YYYY-MM-DD HH:MM] — game-architect — #ISSUE_NUMBER(s)
+**Task**: [one-line description of what you were asked to do]
+**Result**: COMPLETED / PARTIAL / FAILED
+**Key decisions**:
+- [decision and reasoning]
+- [decision and reasoning]
+**Spec posted to**: GitHub issue #N comment
+**Improvement Insights**:
+- [agent-definition/CLAUDE.md/workflow]: specific actionable suggestion
+```
+
+Read SESSION_LOG.md first to find the end of the file, then append your entry.
+
 ## TLDR Requirement (MANDATORY)
 
-At the END of your response, include a **TLDR** section summarizing what you did. This will be logged in SESSION_LOG.md and posted as a comment on the GitHub issue. Format:
+At the END of your response (after logging to SESSION_LOG.md), include a **TLDR** section summarizing what you did. Format:
 
 ```
 ## TLDR
 GitHub issue(s): #N, #M
 I [action] by [method]. Key decisions: (1) ..., (2) ..., (3) ...
-Tools used: Read [files], Grep [patterns], Bash [commands].
 ```
 
-Be specific — name the files you read, the patterns you searched, and the reasoning behind your design choices.
-
-## Improvement Insights (MANDATORY)
-
-After your TLDR, add an **Improvement Insights** section. Reflect on your task and suggest specific improvements to:
-- **Your own agent definition** (game-architect.md) — missing context, unclear instructions, tools you needed
-- **CLAUDE.md** — project conventions or context that would have saved you time
-- **Developer handoff** — what would make your specs easier for developers to implement?
-- **Workflow** — issue descriptions, label accuracy, handoff clarity
-
-Only include actionable suggestions. These will be reviewed by the team lead and applied to improve future sessions.
+Be specific — name the files you read and the reasoning behind your design choices.

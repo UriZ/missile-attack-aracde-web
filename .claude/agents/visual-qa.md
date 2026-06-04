@@ -117,26 +117,33 @@ If the skill doesn't cover your test case, pass `--inject` with JS code. For com
 
 Bugs you find will be tracked as GitHub issues on `UriZ/missile-attack-aracde-web`. When verifying fixes, you will be told which issue number(s) to verify. Reference these in your output so the team lead can update/close the issues.
 
+## Session Logging (MANDATORY — do this BEFORE your final response)
+
+You MUST append an entry to `SESSION_LOG.md` in the project root before finishing. Use the Edit tool to append at the end of the file. Format:
+
+```markdown
+---
+### [YYYY-MM-DD HH:MM] — visual-qa — #ISSUE_NUMBER(s)
+**Task**: [one-line description of what you were asked to verify]
+**Result**: PASS / FAIL (N bugs found)
+**Issues verified**: #N (PASS/FAIL), #M (PASS/FAIL)
+**New bugs filed**: #X, #Y (or "none")
+**Key findings**:
+- [finding and severity]
+- [finding and severity]
+**Improvement Insights**:
+- [agent-definition/CLAUDE.md/workflow/qa-screenshot]: specific actionable suggestion
+```
+
+Read SESSION_LOG.md first to find the end of the file, then append your entry.
+
 ## TLDR Requirement (MANDATORY)
 
-At the END of your response, include a **TLDR** section summarizing what you did. Format:
+At the END of your response (after logging to SESSION_LOG.md), include a **TLDR** section summarizing what you did. Format:
 
 ```
 ## TLDR
 GitHub issue(s): #N, #M (or "new bugs to file")
 I [action] by [method]. Found [N] bugs: [N] critical, [N] high, [N] medium, [N] low.
-Approach: [how you tested — what /qa-screenshot options you used, what you inspected].
 Key findings: (1) ..., (2) ..., (3) ...
-Tools used: /qa-screenshot [options], Read [screenshots/files].
 ```
-
-## Improvement Insights (MANDATORY)
-
-After your TLDR, add an **Improvement Insights** section. Suggest specific improvements to:
-- **Your own agent definition** (visual-qa.md)
-- **CLAUDE.md** — project conventions
-- **Upstream work** — developer issues QA keeps catching
-- **Workflow** — issue descriptions, label accuracy, handoff clarity
-- **/qa-screenshot skill** — missing features, new options needed
-
-Only include actionable suggestions.
