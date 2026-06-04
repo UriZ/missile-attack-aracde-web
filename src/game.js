@@ -696,7 +696,9 @@ export class Game {
       this.audio.playLaunch(launchPos.x, 'heatseeker');
     } else {
       const missile = new Missile(launchPos.x, launchPos.y);
-      missile.launchTo(targetX, targetY);
+      // missileSpeed > 1 means faster: shorter travel time
+      const launchTime = 1.5 / (launcher.missileSpeed || 1.0);
+      missile.launchTo(targetX, targetY, launchTime);
       this.entities.add(missile);
       this.audio.playLaunch(launchPos.x, 'sam');
     }
