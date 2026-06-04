@@ -595,11 +595,23 @@ export class UI {
     _roundRect(ctx, x, y, w, h, 8);
     ctx.fill();
 
+    // Per-type accent color for selected border
+    const ACCENT_COLOR = {
+      sam:        { shadow: '#00CCFF', stroke: 'rgba(0,180,255,0.85)' },
+      heatseeker: { shadow: '#00CCFF', stroke: 'rgba(0,180,255,0.85)' },
+      truck:      { shadow: '#00CCFF', stroke: 'rgba(0,180,255,0.85)' },
+      vulkan:     { shadow: '#00CCFF', stroke: 'rgba(0,180,255,0.85)' },
+      drone_pad:  { shadow: '#00CCFF', stroke: 'rgba(0,180,255,0.85)' },
+      laser:      { shadow: '#00CCFF', stroke: 'rgba(0,180,255,0.85)' },
+      bike:       { shadow: '#FF4400', stroke: 'rgba(255,80,0,0.85)' },
+    };
+    const accent = ACCENT_COLOR[slot.type] || ACCENT_COLOR.sam;
+
     // Border
     if (isSelected) {
-      ctx.shadowColor = '#00CCFF';
+      ctx.shadowColor = accent.shadow;
       ctx.shadowBlur = 14;
-      ctx.strokeStyle = 'rgba(0,180,255,0.85)';
+      ctx.strokeStyle = accent.stroke;
       ctx.lineWidth = 1.5;
     } else if (!isAlive) {
       ctx.strokeStyle = 'rgba(100,30,30,0.4)';
