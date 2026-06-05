@@ -20,6 +20,8 @@ import { HeatSeekingMissile } from './entities/heat-seeking-missile.js';
 import { VulkanBullet } from './entities/vulkan-bullet.js';
 import { EnemyMissile } from './entities/enemy-missile.js';
 import { SuperMissile } from './entities/super-missile.js';
+import { ShockMissile } from './entities/shock-missile.js';
+import { ShockWave } from './entities/shock-wave.js';
 import { Drone } from './entities/drone.js';
 import { SuicideDrone } from './entities/suicide-drone.js';
 import { Nuke } from './entities/nuke.js';
@@ -353,9 +355,12 @@ export class Game {
     // Collision
     this.collision.update(this.entities, this.terrain, this);
 
-    // Wave system — pass a getter so count is checked AFTER spawns
+    // Wave system — pass a getter so count is checked AFTER spawns.
+    // Include shock_waves in the count so a wave cannot complete while a
+    // ShockWave is still propagating and dealing damage.
     this.waves.update(dt, (type) => this._spawnEnemy(type),
-      () => this.entities.getGroup('enemy_missiles').length);
+      () => this.entities.getGroup('enemy_missiles').length +
+            this.entities.getGroup('shock_waves').length);
     this.waveNumber = this.waves.getCurrentWave();
 
     // Keyboard launcher selection (1-7)
@@ -805,6 +810,7 @@ export class Game {
       case 'transport_plane': this._spawnTransportPlane(); break;
       case 'attack_quad': this._spawnAttackQuad(); break;
       case 'kamikaze_quad': this._spawnKamikazeQuad(); break;
+      case 'shock_missile': this._spawnShockMissile(); break;
     }
   }
 
@@ -832,6 +838,40 @@ export class Game {
     const targetX = randf(300, 2260);
     const targetY = this.terrain ? this.terrain.getHeightAt(targetX) : 1240;
     missile.launchTo(targetX, targetY, randf(6.0, 10.0));
+    this.entities.add(missile);
+  }
+
+  _spawnShockMissile() {
+    const spawnX = randf(100, 2460);
+    const spawnY = randf(-100, -50);
+    const missile = new ShockMissile(spawnX, spawnY);
+
+    // 60% chance to target a launcher directly — shock wave is more dangerous near bases
+    let targetX;
+    if (Math.random() < 0.6 && this.launchers.some(l => l.alive)) {
+      const alive = this.launchers.filter(l => l.alive);
+      const target = alive[Math.floor(Math.random() * alive.length)];
+      // Aim slightly offset so shockwave propagates through multiple launchers
+      targetX = target.x + randf(-120, 120);
+    } else {
+      targetX = randf(100, 2460);
+    }
+    const targetY = this.terrain ? this.terrain.getHeightAt(targetX) : 1240;
+    missile.launchTo(targetX, targetY, randf(8.0, 12.0));
+
+    // Wire ground impact callback — spawn ShockWave + electric explosion
+    missile.onImpact = (x, y) => {
+      // Small electric explosion visual (blue flash, not a mega explosion)
+      this.entities.add(new Explosion(x, y, false));
+      this.audio.playShockZap(x);
+      this.shakeScreen(6);
+
+      // Spawn ShockWave
+      const wave = new ShockWave(x, y, this.terrain);
+      wave.getLaunchers = () => this.launchers;
+      this.entities.add(wave);
+    };
+
     this.entities.add(missile);
   }
 

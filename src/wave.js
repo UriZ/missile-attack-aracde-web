@@ -90,6 +90,7 @@ export class WaveSystem {
       nuke:            6,
       attack_quad:     4,
       kamikaze_quad:   3,
+      shock_missile:   3,
     };
 
     // ── Weighted pool with jittered unlock thresholds ──
@@ -104,6 +105,7 @@ export class WaveSystem {
       ['nuke',            3, 1],
       ['attack_quad',     2, 1.5],
       ['kamikaze_quad',   2, 1.5],
+      ['shock_missile',   3, 1.5],
     ];
 
     // Build weighted pool — jitter thresholds by ±1 wave for variety

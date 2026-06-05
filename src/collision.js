@@ -60,6 +60,9 @@ function isKamikazeQuad(e) { return e.constructor.name === 'KamikazeQuad'; }
 /** @param {import('./entities/entity.js').Entity} e */
 function isQuadTracer(e) { return e.constructor.name === 'QuadTracer'; }
 
+/** @param {import('./entities/entity.js').Entity} e */
+function isShockMissile(e) { return e.constructor.name === 'ShockMissile'; }
+
 // ------------------------------------------------------------------
 // Geometry helpers
 // ------------------------------------------------------------------
@@ -402,6 +405,14 @@ export class CollisionSystem {
         spawnCrater(entityManager, ex, ey, 5);
 
         game.shakeScreen(30);
+      } else if (isShockMissile(enemy)) {
+        // ShockMissile delegates all impact effects to its onImpact callback.
+        // game.js wires onImpact to spawn a ShockWave + electric explosion.
+        // Minimal terrain damage — the shockwave is the real threat.
+        terrain.damage(ex, ey, 30, 12);
+        spawnCrater(entityManager, ex, ey, 0.8);
+
+        if (enemy.onImpact) enemy.onImpact(ex, ey);
       } else {
         // Standard enemy missile / drone hits ground.
         spawnExplosion(entityManager, game, ex, ey, false);
@@ -517,6 +528,13 @@ export class CollisionSystem {
           spawnCrater(entityManager, ix, craterY, 0.5);
 
           game.shakeScreen(4);
+        } else if (isShockMissile(enemy)) {
+          // ShockMissile direct launcher hit — small electric explosion, then shockwave.
+          terrain.damage(ix, iy, 30, 12);
+          spawnCrater(entityManager, ix, craterY, 0.8);
+          game.shakeScreen(6);
+
+          if (enemy.onImpact) enemy.onImpact(ix, craterY);
         } else {
           // Standard enemy missile or drone.
           spawnExplosion(entityManager, game, ix, iy, true);

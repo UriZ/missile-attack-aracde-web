@@ -119,6 +119,9 @@ export class Audio {
     this.laserFiringLoopBuffer = null;
     this.laserHitBuffer = null;
 
+    // Shock Blast sounds
+    this.shockZapBuffer = null;
+
     this.radioChatterBuffers = [];
     this._radioChatterLoaded = false;
     this._chatterPlaying = false;
@@ -164,6 +167,9 @@ export class Audio {
     this.laserWarmUpBuffer      = this._generateLaserWarmUpBuffer();
     this.laserFiringLoopBuffer  = this._generateLaserFiringLoopBuffer();
     this.laserHitBuffer         = this._generateLaserHitBuffer();
+
+    // Shock Blast sounds
+    this.shockZapBuffer = this._generateShockZapBuffer();
 
     this._loadRadioChatter();
     this._loadThunder();
@@ -1153,6 +1159,86 @@ export class Audio {
 
       let val = (sq1 + sq2 + s3) * env * wobble * 0.55;
       val = Math.tanh(val * 2.5) / Math.tanh(2.5);
+
+      samples[i] = val;
+    }
+
+    return this._createBuffer(samples, sampleRate);
+  }
+
+  // -- Shock Zap: electric crackling/zap when shockwave spawns or propagates -
+  /**
+   * One-shot electric crackling/zap for ShockMissile impact and ShockWave propagation.
+   * White noise burst filtered via bandpass with rapid amplitude modulation for crackle.
+   * @param {number} x — world x for stereo pan
+   */
+  playShockZap(x) {
+    if (!this.audioCtx) return;
+    this._playBuffer(this.shockZapBuffer, 3.0, randf(0.85, 1.15), panFromX(x));
+  }
+
+  _generateShockZapBuffer() {
+    const sampleRate = 22050;
+    const duration = 0.35;
+    const numSamples = Math.floor(sampleRate * duration);
+    const samples = new Float32Array(numSamples);
+
+    // Bandpass center frequency — electric arc character sits around 1200 Hz
+    const centerFreq = 1200;
+    const Q = 4.0;    // resonance bandwidth
+    // Simple biquad bandpass coefficients (2nd order IIR)
+    const omega = TAU * centerFreq / sampleRate;
+    const alpha = Math.sin(omega) / (2 * Q);
+    const bpB0 =  alpha;
+    const bpB1 =  0;
+    const bpB2 = -alpha;
+    const bpA0 =  1 + alpha;
+    const bpA1 = -2 * Math.cos(omega);
+    const bpA2 =  1 - alpha;
+
+    // Normalized coefficients
+    const b0 = bpB0 / bpA0;
+    const b1 = bpB1 / bpA0;
+    const b2 = bpB2 / bpA0;
+    const a1 = bpA1 / bpA0;
+    const a2 = bpA2 / bpA0;
+
+    let x1 = 0, x2 = 0, y1 = 0, y2 = 0;
+
+    for (let i = 0; i < numSamples; i++) {
+      const t = i / sampleRate;
+      const progress = t / duration;
+
+      // Envelope: fast attack (2ms), exponential decay with crackle tail
+      let env;
+      if (t < 0.002) {
+        env = t / 0.002;
+      } else {
+        env = Math.exp(-5.5 * (t - 0.002));
+      }
+
+      // White noise source
+      const noise = randf(-1.0, 1.0);
+
+      // Apply bandpass IIR filter
+      const filtered = b0 * noise + b1 * x1 + b2 * x2 - a1 * y1 - a2 * y2;
+      x2 = x1; x1 = noise;
+      y2 = y1; y1 = filtered;
+
+      // Rapid amplitude modulation (crackle effect) — 80-180 Hz AM
+      const crackleRate = 120 + Math.sin(TAU * 8 * t) * 40;
+      const amMod = 0.5 + 0.5 * Math.abs(Math.sin(TAU * crackleRate * t));
+
+      // High-freq arc tone (adds electric character)
+      const arcTone = Math.sin(TAU * 2800 * t + Math.sin(TAU * 45 * t) * 3) * 0.15;
+
+      // Low sub thump on initial impact
+      const subThump = Math.sin(TAU * 60 * t) * Math.max(0, 1 - t / 0.04) * 0.25;
+
+      let val = (filtered * amMod * 0.6 + arcTone + subThump) * env;
+
+      // Soft clip
+      val = Math.tanh(Math.max(-1.5, Math.min(1.5, val)) * 2.0) / Math.tanh(2.0);
 
       samples[i] = val;
     }
