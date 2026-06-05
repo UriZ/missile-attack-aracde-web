@@ -110,6 +110,7 @@ export class HeatSeekerLauncher extends Launcher {
   draw(ctx) {
     ctx.save();
     ctx.translate(this.x, this.y);
+    ctx.translate(this._hitShakeX || 0, this._hitShakeY || 0);
 
     // Selection glow — teal/cyan per spec
     if (this.isSelected) {
@@ -253,6 +254,10 @@ export class HeatSeekerLauncher extends Launcher {
     ctx.restore(); // radar rotation
 
     ctx.restore(); // turret rotation
+
+    // Damage overlay — base body bounds
+    this._drawDamageOverlay(ctx, 46, 30, -8);
+
     ctx.restore(); // entity position
   }
 }

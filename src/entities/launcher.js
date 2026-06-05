@@ -141,6 +141,7 @@ export class Launcher extends Entity {
    */
   takeDamage(amount) {
     if (!this.alive) return false;
+    if (amount <= 0) return false;
 
     this.hp = Math.max(0, this.hp - amount);
 

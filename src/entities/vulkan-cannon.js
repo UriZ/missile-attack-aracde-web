@@ -206,6 +206,7 @@ export class VulkanCannon extends Launcher {
   draw(ctx) {
     ctx.save();
     ctx.translate(this.x, this.y);
+    ctx.translate(this._hitShakeX || 0, this._hitShakeY || 0);
 
     // ── 1. Selection glow ────────────────────────────────────────
     if (this.isSelected) {
@@ -829,6 +830,9 @@ export class VulkanCannon extends Launcher {
     }
 
     ctx.restore(); // turret rotation
+
+    // Damage overlay — pedestal base bounds
+    this._drawDamageOverlay(ctx, 44, 32, -18);
 
     ctx.restore(); // entity position
 

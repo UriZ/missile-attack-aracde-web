@@ -337,6 +337,7 @@ export class BikeLauncher extends TruckLauncher {
     // Flip horizontally only when facing left.
     ctx.save();
     ctx.translate(worldX, worldY);
+    ctx.translate(this._hitShakeX || 0, this._hitShakeY || 0);
     ctx.rotate(this._slopeAngle);
     if (!this.facingRight) {
       ctx.scale(-1, 1);
@@ -653,6 +654,9 @@ export class BikeLauncher extends TruckLauncher {
       ctx.fill();
       ctx.restore();
     }
+
+    // Damage overlay — full bike body bounds (helmet top to ground)
+    this._drawDamageOverlay(ctx, 55, 4, -64);
 
     ctx.restore(); // entity transform
   }

@@ -230,6 +230,7 @@ export class TruckLauncher extends Launcher {
 
     ctx.save();
     ctx.translate(this.x, this.y);
+    ctx.translate(this._hitShakeX || 0, this._hitShakeY || 0);
 
     // Terrain tilt
     ctx.rotate(this._slopeAngle);
@@ -390,6 +391,10 @@ export class TruckLauncher extends Launcher {
     }
 
     ctx.restore(); // turret rotation
+
+    // Damage overlay — truck body bounds (cab top to chassis rim)
+    this._drawDamageOverlay(ctx, 57, 24, -44);
+
     ctx.restore(); // entity position (translate + rotate + optional scale)
   }
 }

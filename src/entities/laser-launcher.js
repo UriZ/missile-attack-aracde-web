@@ -496,6 +496,7 @@ export class LaserLauncher extends Launcher {
 
     ctx.save();
     ctx.translate(this.x, this.y);
+    ctx.translate(this._hitShakeX || 0, this._hitShakeY || 0);
 
     // ── 1. Selection glow (violet identity) ──────────────────────────
     if (this.isSelected) {
@@ -701,6 +702,9 @@ export class LaserLauncher extends Launcher {
     }
 
     ctx.restore(); // end turret rotation
+
+    // Damage overlay — base platform bounds
+    this._drawDamageOverlay(ctx, 46, 32, 4);
 
     ctx.restore(); // end entity position
 

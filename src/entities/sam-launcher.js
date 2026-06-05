@@ -104,6 +104,7 @@ export class SAMLauncher extends Launcher {
   draw(ctx) {
     ctx.save();
     ctx.translate(this.x, this.y);
+    ctx.translate(this._hitShakeX || 0, this._hitShakeY || 0);
 
     // Selection glow (behind everything) — cyan per spec
     if (this.isSelected) {
@@ -238,6 +239,10 @@ export class SAMLauncher extends Launcher {
     ctx.fillRect(9, -70, 3, 14);
 
     ctx.restore(); // turret rotation
+
+    // Damage overlay (flash, sparks, smoke, red tint) — base body bounds
+    this._drawDamageOverlay(ctx, 54, 30, -10);
+
     ctx.restore(); // entity position
   }
 }
