@@ -874,3 +874,22 @@ Fixes applied:
 - **[senior-game-developer.md]**: Add note that `_drawDamageOverlay` is opt-in for subclasses — the base class only provides the helper; subclasses must call it themselves inside their `draw()` before the final `ctx.restore()`. Without a documented convention, the feature may appear "missing" in QA if overlays aren't wired up.
 - **[CLAUDE.md]**: Document that paratrooper.js has a direct `launcher.destroy()` call in `_updateAttacking()` — any system that intercepts launcher death needs to patch this too.
 - **[workflow]**: Issue #77 task description could have listed all call sites that destroy launchers (collision.js section 3, nuke area damage, paratrooper.js) so developers don't need to grep for them manually.
+
+---
+
+## Iteration N: Shock Blast Entities (#78)
+
+### Phase 1: Developer Implementation
+
+**[Team Lead → senior-game-developer "dev-shock-blast"]**
+- **Agent type**: `senior-game-developer`
+- **Task**: Implement ShockMissile + ShockWave entities and wire into game
+- **GitHub issues**: #78
+
+**[dev-shock-blast → Team Lead] — COMPLETED**
+- **Agent TLDR**: Implemented 6 files across all required integration points. (1) `src/entities/shock-missile.js`: Extends EnemyMissile. Blue-white visual: outer radial gradient glow, dark blue body, 4 crackling electric arcs (each randomly active per frame for crackle), electric blue plasma thruster. World-space spark trail system emitting 2-3 sparks at 30Hz from missile tail. Groups: `enemy_missiles` — interceptable by all player weapons. Fires `onImpact(x, y)` callback on ground hit. (2) `src/entities/shock-wave.js`: Propagates at 400px/s per side, max 600px range. 3-pass arc rendering (outer glow at 6px/shadowBlur 8, mid at 2px/shadowBlur 4, white core at 1px) jittered from `terrain.getHeightAt()` at 8px intervals. Leading-edge radial flash. Branch lightning with sub-branches. Crackling particle system. Damage: `0.6 * max(0, 1 - dist/maxRange)` applied once per launcher as wave front crosses it, via `launcher.takeDamage()`. Uses a Set to prevent double-hitting launchers. Self-destructs after both fronts reach 600px. In `shock_waves` group. (3) `src/engine/audio.js`: Added `playShockZap(x)` + `_generateShockZapBuffer()`: bandpass IIR filter (1200Hz, Q=4) applied to white noise + rapid AM crackle modulation at 80-180Hz + arc tone at 2800Hz with FM + sub-bass thump. 0.35s duration. (4) `src/collision.js`: Added `isShockMissile()` type guard. ShockMissile terrain collision: 30px/12 terrain damage, 0.8 crater, calls `onImpact`. ShockMissile launcher collision: same pattern. Intercepted ShockMissile uses standard intercept path (explosion + score). (5) `src/game.js`: Imports ShockMissile/ShockWave. `_spawnShockMissile()`: 60% chance launcher-targeted (±120px offset for multi-launcher coverage), wires `onImpact` to spawn ShockWave + play audio + shake screen. Wave count includes `shock_waves` group to prevent premature wave completion while shockwave is still active. (6) `src/wave.js`: shock_missile cost=3, minWave=3, weight=1.5. Also pulled main branch (commit ee37235) into worktree before starting — the launcher HP system was committed to main but not fetched by the worktree.
+
+**Improvement Insights**:
+- **[CLAUDE.md]**: Document that worktrees may be behind main — agents should always `git pull` the parent repo into the worktree before starting if their feature depends on recent commits.
+- **[senior-game-developer.md]**: Note that `entity.onImpact` callback pattern exists in EnemyMissile base class — new enemy missile variants should use this for custom ground-impact effects instead of subclassing collision.js.
+- **[CLAUDE.md]**: Document that `shock_waves` group exists and is included in wave enemy count in game.js. New wave-blocking entities should follow same pattern.
